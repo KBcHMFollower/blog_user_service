@@ -14,6 +14,7 @@ type Config struct {
 	GRPC           GRPCConfig `yaml:"grpc"`
 	MigrationsPath string
 	TokenTTL       time.Duration `yaml:"token_ttl" env-default:"1h"`
+	TocenSecret 	string `yaml:"token_secret" env-required:"true"`
 }
 
 type GRPCConfig struct {
