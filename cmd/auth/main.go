@@ -16,7 +16,7 @@ func main() {
 
 	log := logger.SetupLogger(cfg.Env)
 
-	app := app.New(log, int(cfg.GRPC.Port), cfg.StoragePath, cfg.TokenTTL, cfg.TocenSecret)
+	app := app.New(log, int(cfg.GRPC.Port), cfg.ConnectionString, cfg.MigradionPath, cfg.TokenTTL, cfg.TocenSecret)
 	log.Info("сервер запускается!")
 
 	go app.GRpcServer.Run()

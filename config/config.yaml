@@ -1,5 +1,6 @@
 env: "local"
-storage_path: "./storage/sso.db"
+connection_string: "host=localhost port=5001 user=postgres password=admin dbname=golang_auth sslmode=disable"
+migration_path: "./migrations"
 grpc:
   port: 44044
   timeout: 5s
