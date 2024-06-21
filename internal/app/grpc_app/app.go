@@ -2,39 +2,39 @@ package grpcapp
 
 import (
 	"fmt"
+	auth_service "github.com/KBcHMFollower/auth-service/internal/services"
 	"log/slog"
 	"net"
 
 	auth_server "github.com/KBcHMFollower/auth-service/internal/grpc/auth"
-	auth_service "github.com/KBcHMFollower/auth-service/internal/services/auth"
 	"google.golang.org/grpc"
 )
 
 type App struct {
-	log *slog.Logger
+	log        *slog.Logger
 	gRpcServer *grpc.Server
-	port int
+	port       int
 }
 
 func New(
 	log *slog.Logger,
 	port int,
-	authService *auth_service.AuthService,
-)(*App){
-	gRpcServer:=grpc.NewServer()
+	authService *auth_service.UserService,
+) *App {
+	gRpcServer := grpc.NewServer()
 	auth_server.Register(gRpcServer, authService)
 
 	return &App{
-		log: log,
-		port: port,
+		log:        log,
+		port:       port,
 		gRpcServer: gRpcServer,
 	}
 }
 
-func (a *App) Run() error{
+func (a *App) Run() error {
 	const op = "grpcapp.Run"
 
-	log:=a.log.With(
+	log := a.log.With(
 		slog.String("op", op),
 		slog.Int("port", a.port),
 	)
@@ -42,10 +42,9 @@ func (a *App) Run() error{
 	log.Info("starting gRpc server")
 
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", a.port))
-	if err != nil{
+	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
-	
 
 	log.Info("grpc server is running", slog.String("addr", l.Addr().String()))
 
@@ -53,13 +52,15 @@ func (a *App) Run() error{
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
+	log.Info("grpc server is get up ", slog.Int("port", 1212))
+
 	return nil
 }
 
-func (a *App) Stop(){
+func (a *App) Stop() {
 	const op = "grpcapp.Stop"
 
-	log:=a.log.With(
+	log := a.log.With(
 		slog.String("op", op),
 	)
 

@@ -1,4 +1,4 @@
-package migrator
+package database
 
 import (
 	"database/sql"
@@ -16,7 +16,7 @@ type Migrator struct {
 	driver database.Driver
 }
 
-func New(db *sql.DB) (*Migrator, error) {
+func NewMigrator(db *sql.DB) (*Migrator, error) {
 	driver, err := postgres.WithInstance(db, &postgres.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("could not create driver instance: %w", err)
@@ -28,7 +28,7 @@ func New(db *sql.DB) (*Migrator, error) {
 }
 
 func (m *Migrator) Migrate(pathToMigrations string, dbName string) error {
-	// Ensure pathToMigrations has the correct scheme
+
 	if !strings.HasPrefix(pathToMigrations, "file://") {
 		pathToMigrations = "file://" + pathToMigrations
 	}
@@ -41,6 +41,20 @@ func (m *Migrator) Migrate(pathToMigrations string, dbName string) error {
 	err = migration.Up()
 	if err != nil && err != migrate.ErrNoChange {
 		return fmt.Errorf("could not apply migrations: %w", err)
+	}
+
+	return nil
+}
+
+func ForceMigrate(db *sql.DB, pathToMigrates string) error {
+	migrator, err := NewMigrator(db)
+	if err != nil {
+		return fmt.Errorf("can`t create migrator : %v", err)
+	}
+
+	err = migrator.Migrate(pathToMigrates, "postgres")
+	if err != nil {
+		return fmt.Errorf("can`t migrate : %v", err)
 	}
 
 	return nil

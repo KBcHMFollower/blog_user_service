@@ -1,12 +1,12 @@
 package app
 
 import (
-	"log/slog"
-	"time"
-
-	grpcapp "github.com/KBcHMFollower/auth-service/internal/app/grpcApp"
+	"github.com/KBcHMFollower/auth-service/config"
+	"github.com/KBcHMFollower/auth-service/database"
+	grpcapp "github.com/KBcHMFollower/auth-service/internal/app/grpc_app"
 	"github.com/KBcHMFollower/auth-service/internal/repository"
-	auth_service "github.com/KBcHMFollower/auth-service/internal/services/auth"
+	auth_service "github.com/KBcHMFollower/auth-service/internal/services"
+	"log/slog"
 )
 
 type App struct {
@@ -15,31 +15,31 @@ type App struct {
 
 func New(
 	log *slog.Logger,
-	port int,
-	connectionString string,
-	migrationPath string,
-	tokenTTL time.Duration,
-	tokenSecret string,
-) (*App){
+	cfg *config.Config,
+) *App {
 
-	repository, err := repository.NewPostgressStore(connectionString)
-	if err != nil{
-		log.Error("Оштбка подключения к базе данных")
+	driver, db, err := database.New(cfg.Storage.ConnectionString)
+	if err != nil {
+		log.Error("can`t connect to database", err)
 		panic(err)
 	}
 
-	migrateErr := repository.Migrate(migrationPath)
-	if migrateErr != nil {
-		log.Error("Оштбка миграции")
-		panic(migrateErr)
+	if err := database.ForceMigrate(db, cfg.Storage.MigrationPath); err != nil {
+		log.Error("can`t migrate database", err)
+		panic(err)
 	}
 
-	authService := auth_service.New(log, tokenTTL,tokenSecret, repository, repository)
+	userRepository, err := repository.NewUserRepository(driver)
+	if err != nil {
+		log.Error("can`t create user repository", err)
+		panic(err)
+	}
 
-	grpcApp := grpcapp.New(log, port, authService)
+	authService := auth_service.New(log, cfg.JWT.TokenTTL, cfg.JWT.TokenSecret, userRepository, userRepository)
+
+	grpcApp := grpcapp.New(log, cfg.GRpc.Port, authService)
 
 	return &App{
 		GRpcServer: grpcApp,
 	}
-} 
-
+}

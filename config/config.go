@@ -8,19 +8,26 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
-type Config struct {
-	Env            string     `yaml:"env" env-default:"local"`
-	ConnectionString    string     `yaml:"connection_string" env-required:"true"`
-	MigradionPath    string     `yaml:"migration_path" env-required:"true"`
-	GRPC           GRPCConfig `yaml:"grpc"`
-	MigrationsPath string
-	TokenTTL       time.Duration `yaml:"token_ttl" env-default:"1h"`
-	TocenSecret 	string `yaml:"token_secret" env-required:"true"`
+type GRPC struct {
+	Port    int           `yaml:"port" env-default:"4041"`
+	Timeout time.Duration `yaml:"timeout" env-default:"4s"`
 }
 
-type GRPCConfig struct {
-	Port    int           `yaml:"port"`
-	Timeout time.Duration `yaml:"timeout"`
+type Config struct {
+	Env     string  `yaml:"env" env-default:"local"`
+	GRpc    GRPC    `yaml:"grpc" env-required:"true"`
+	Storage Storage `yaml:"storage" env-required:"true"`
+	JWT     JWT     `yaml:"jwt" env-required:"true"`
+}
+
+type JWT struct {
+	TokenTTL    time.Duration `yaml:"token_ttl" env-default:"1h"`
+	TokenSecret string        `yaml:"token_secret" env-default:"secret"`
+}
+
+type Storage struct {
+	ConnectionString string `yaml:"connection_string" env-required:"true"`
+	MigrationPath    string `yaml:"migration_path" env-required:"true"`
 }
 
 func MustLoad() *Config {

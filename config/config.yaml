@@ -1,8 +1,11 @@
 env: "local"
-connection_string: "host=localhost port=5001 user=postgres password=admin dbname=golang_auth sslmode=disable"
-migration_path: "./migrations"
+storage:
+  connection_string: "host=localhost port=5001 user=postgres password=admin dbname=golang_users sslmode=disable"
+  migration_path: "./migrations"
 grpc:
   port: 44044
   timeout: 5s
-token_ttl: 1h
-token_secret: "dawsdawsd"
+jwt:
+  token_ttl: 1h
+  token_secret: "dawsdawsd"
+
