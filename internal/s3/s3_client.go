@@ -27,6 +27,7 @@ func New(endpoint string, accessKeyID string, secretAccessKey string, bucketName
 		Secure: false,
 	})
 	if err != nil {
+		fmt.Println("ефсфывфцыв: ", err)
 		return nil, err
 	}
 
@@ -40,6 +41,7 @@ func (s *S3Client) UploadFile(ctx context.Context, fileName string, fileBytes []
 		ContentType: contentType,
 	})
 	if err != nil {
+		fmt.Println("Error uploading file: ", err)
 		return "", err
 	}
 

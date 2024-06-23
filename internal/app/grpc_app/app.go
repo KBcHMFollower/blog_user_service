@@ -4,6 +4,7 @@ import (
 	"fmt"
 	grpcservers "github.com/KBcHMFollower/blog_user_service/internal/grpc"
 	auth_service "github.com/KBcHMFollower/blog_user_service/internal/services"
+	"google.golang.org/grpc/peer"
 	"log/slog"
 	"net"
 
@@ -21,7 +22,7 @@ func New(
 	port int,
 	userService *auth_service.UserService,
 ) *App {
-	gRpcServer := grpc.NewServer()
+	gRpcServer := grpc.NewServer(grpc.StreamInterceptor(logStreamInterceptor))
 	grpcservers.RegisterAuthServer(gRpcServer, userService)
 	grpcservers.RegisterUserServer(gRpcServer, userService)
 
@@ -68,4 +69,14 @@ func (a *App) Stop() {
 	log.Info("stopping gRpc server")
 
 	a.gRpcServer.GracefulStop()
+}
+
+func logStreamInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	p, ok := peer.FromContext(ss.Context())
+	if !ok {
+		fmt.Printf("Failed to get peer information from context")
+	} else {
+		fmt.Printf("Client connected from %s", p.Addr)
+	}
+	return handler(srv, ss)
 }
