@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 	"fmt"
-	"github.com/KBcHMFollower/auth-service/database"
-	"github.com/KBcHMFollower/auth-service/internal/domain/models"
+	"github.com/KBcHMFollower/blog_user_service/database"
+	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"

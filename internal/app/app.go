@@ -1,12 +1,12 @@
 package app
 
 import (
-	"github.com/KBcHMFollower/auth-service/config"
-	"github.com/KBcHMFollower/auth-service/database"
-	grpcapp "github.com/KBcHMFollower/auth-service/internal/app/grpc_app"
-	"github.com/KBcHMFollower/auth-service/internal/repository"
-	s3client "github.com/KBcHMFollower/auth-service/internal/s3"
-	auth_service "github.com/KBcHMFollower/auth-service/internal/services"
+	"github.com/KBcHMFollower/blog_user_service/config"
+	"github.com/KBcHMFollower/blog_user_service/database"
+	grpcapp "github.com/KBcHMFollower/blog_user_service/internal/app/grpc_app"
+	"github.com/KBcHMFollower/blog_user_service/internal/repository"
+	s3client "github.com/KBcHMFollower/blog_user_service/internal/s3"
+	auth_service "github.com/KBcHMFollower/blog_user_service/internal/services"
 	"log/slog"
 )
 

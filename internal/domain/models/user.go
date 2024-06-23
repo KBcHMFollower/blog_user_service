@@ -1,7 +1,7 @@
 package models
 
 import (
-	usersv1 "github.com/KBcHMFollower/auth-service/api/protos/gen/users"
+	usersv1 "github.com/KBcHMFollower/blog_user_service/api/protos/gen/users"
 	"time"
 
 	"github.com/google/uuid"

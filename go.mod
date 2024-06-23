@@ -1,4 +1,4 @@
-module github.com/KBcHMFollower/auth-service
+module github.com/KBcHMFollower/blog_user_service
 
 go 1.22.4
 

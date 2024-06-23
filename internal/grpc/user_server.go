@@ -2,8 +2,8 @@ package grpcservers
 
 import (
 	"context"
-	usersv1 "github.com/KBcHMFollower/auth-service/api/protos/gen/users"
-	"github.com/KBcHMFollower/auth-service/internal/services"
+	usersv1 "github.com/KBcHMFollower/blog_user_service/api/protos/gen/users"
+	"github.com/KBcHMFollower/blog_user_service/internal/services"
 	"google.golang.org/grpc"
 )
 

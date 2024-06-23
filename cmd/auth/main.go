@@ -1,14 +1,14 @@
 package main
 
 import (
-	"github.com/KBcHMFollower/auth-service/config"
+	"github.com/KBcHMFollower/blog_user_service/config"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/KBcHMFollower/auth-service/internal/app"
-	"github.com/KBcHMFollower/auth-service/internal/logger"
+	"github.com/KBcHMFollower/blog_user_service/internal/app"
+	"github.com/KBcHMFollower/blog_user_service/internal/logger"
 )
 
 func main() {

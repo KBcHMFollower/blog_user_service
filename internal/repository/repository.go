@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"github.com/KBcHMFollower/auth-service/internal/domain/models"
+	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
 	"github.com/google/uuid"
 )
 

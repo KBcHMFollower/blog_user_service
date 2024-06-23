@@ -3,15 +3,16 @@ package services
 import (
 	"context"
 	"fmt"
-	ssov1 "github.com/KBcHMFollower/auth-service/api/protos/gen/auth"
-	usersv1 "github.com/KBcHMFollower/auth-service/api/protos/gen/users"
-	"github.com/KBcHMFollower/auth-service/internal/lib/tokens"
-	"github.com/KBcHMFollower/auth-service/internal/repository"
-	s3client "github.com/KBcHMFollower/auth-service/internal/s3"
+	ssov1 "github.com/KBcHMFollower/blog_user_service/api/protos/gen/auth"
+	usersv1 "github.com/KBcHMFollower/blog_user_service/api/protos/gen/users"
+	"github.com/KBcHMFollower/blog_user_service/internal/lib/tokens"
+
+	"github.com/KBcHMFollower/blog_user_service/internal/repository"
+	s3client "github.com/KBcHMFollower/blog_user_service/internal/s3"
 	"log/slog"
 	"time"
 
-	"github.com/KBcHMFollower/auth-service/internal/domain/models"
+	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )

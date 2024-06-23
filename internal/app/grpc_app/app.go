@@ -2,8 +2,8 @@ package grpcapp
 
 import (
 	"fmt"
-	grpcservers "github.com/KBcHMFollower/auth-service/internal/grpc"
-	auth_service "github.com/KBcHMFollower/auth-service/internal/services"
+	grpcservers "github.com/KBcHMFollower/blog_user_service/internal/grpc"
+	auth_service "github.com/KBcHMFollower/blog_user_service/internal/services"
 	"log/slog"
 	"net"
 
