@@ -8,16 +8,24 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
-type GRPC struct {
-	Port    int           `yaml:"port" env-default:"4041"`
-	Timeout time.Duration `yaml:"timeout" env-default:"4s"`
-}
-
 type Config struct {
 	Env     string  `yaml:"env" env-default:"local"`
 	GRpc    GRPC    `yaml:"grpc" env-required:"true"`
 	Storage Storage `yaml:"storage" env-required:"true"`
 	JWT     JWT     `yaml:"jwt" env-required:"true"`
+	Minio   Minio   `yaml:"minio" env-required:"true"`
+}
+
+type Minio struct {
+	Endpoint  string `yaml:"endpoint" env-required:"true"`
+	AccessKey string `yaml:"access_key" env-required:"true"`
+	SecretKey string `yaml:"secret_key" env-required:"true"`
+	Bucket    string `yaml:"bucket" env-required:"true"`
+}
+
+type GRPC struct {
+	Port    int           `yaml:"port" env-default:"4041"`
+	Timeout time.Duration `yaml:"timeout" env-default:"4s"`
 }
 
 type JWT struct {

@@ -5,6 +5,7 @@ import (
 	"github.com/KBcHMFollower/auth-service/database"
 	grpcapp "github.com/KBcHMFollower/auth-service/internal/app/grpc_app"
 	"github.com/KBcHMFollower/auth-service/internal/repository"
+	s3client "github.com/KBcHMFollower/auth-service/internal/s3"
 	auth_service "github.com/KBcHMFollower/auth-service/internal/services"
 	"log/slog"
 )
@@ -29,13 +30,19 @@ func New(
 		panic(err)
 	}
 
+	s3Client, err := s3client.New(cfg.Minio.Endpoint, cfg.Minio.AccessKey, cfg.Minio.SecretKey, cfg.Minio.Bucket)
+	if err != nil {
+		log.Error("can`t create S3 client", err)
+		panic(err)
+	}
+
 	userRepository, err := repository.NewUserRepository(driver)
 	if err != nil {
 		log.Error("can`t create user repository", err)
 		panic(err)
 	}
 
-	authService := auth_service.New(log, cfg.JWT.TokenTTL, cfg.JWT.TokenSecret, userRepository, userRepository)
+	authService := auth_service.New(log, cfg.JWT.TokenTTL, cfg.JWT.TokenSecret, userRepository, s3Client)
 
 	grpcApp := grpcapp.New(log, cfg.GRpc.Port, authService)
 

@@ -8,4 +8,9 @@ grpc:
 jwt:
   token_ttl: 1h
   token_secret: "dawsdawsd"
+minio:
+  endpoint : "localhost:9000"
+  access_key: "minioadmin"
+  secret_key: "minioadmin"
+  bucket: "mybucket"
 
