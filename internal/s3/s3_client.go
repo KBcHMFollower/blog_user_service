@@ -47,8 +47,7 @@ func (s *S3Client) UploadFile(ctx context.Context, fileName string, fileBytes []
 		return "", err
 	}
 
-	url := fmt.Sprintf("%s/%s/%s", s.minioClient.EndpointURL(), s.bucketName, fileName)
-	return url, nil
+	return fileName, nil
 }
 
 func (s *S3Client) GetFile(ctx context.Context, fileName string) ([]byte, error) {
