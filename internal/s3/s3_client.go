@@ -14,7 +14,7 @@ const (
 )
 
 type ImageStore interface {
-	UploadFile(ctx context.Context, fileName string, fileBytes []byte, contentType string) (string, error)
+	UploadFile(ctx context.Context, fileName string, baseUrl string, fileBytes []byte, contentType string) (string, error)
 	GetFile(ctx context.Context, fileName string) ([]byte, error)
 }
 
@@ -36,7 +36,7 @@ func New(endpoint string, accessKeyID string, secretAccessKey string, bucketName
 	return &S3Client{minioClient, bucketName}, nil
 }
 
-func (s *S3Client) UploadFile(ctx context.Context, fileName string, fileBytes []byte, contentType string) (string, error) {
+func (s *S3Client) UploadFile(ctx context.Context, fileName string, baseUrl string, fileBytes []byte, contentType string) (string, error) {
 	reader := bytes.NewReader(fileBytes)
 
 	_, err := s.minioClient.PutObject(ctx, s.bucketName, fileName, reader, reader.Size(), minio.PutObjectOptions{
@@ -47,7 +47,7 @@ func (s *S3Client) UploadFile(ctx context.Context, fileName string, fileBytes []
 		return "", err
 	}
 
-	return fileName, nil
+	return baseUrl + fileName, nil
 }
 
 func (s *S3Client) GetFile(ctx context.Context, fileName string) ([]byte, error) {

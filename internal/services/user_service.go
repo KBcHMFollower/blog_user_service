@@ -341,7 +341,7 @@ func (a *UserService) UploadAvatar(ctx context.Context, dto *usersv1.UploadAvata
 		return nil, fmt.Errorf("%w", err)
 	}
 
-	imgUrl, err := a.imgStore.UploadFile(ctx, fmt.Sprintf("%s.jpeg", uuid.New().String()), dto.GetImage(), s3client.ImageJpeg)
+	imgUrl, err := a.imgStore.UploadFile(ctx, fmt.Sprintf("%s.jpeg", uuid.New().String()), dto.GetBaseUrl(), dto.GetImage(), s3client.ImageJpeg)
 	if err != nil {
 		log.Error("can`t upload image: ", err)
 		return nil, fmt.Errorf("%w", err)

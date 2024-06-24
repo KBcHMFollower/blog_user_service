@@ -4,7 +4,7 @@
 // - protoc             v5.27.1
 // source: users.proto
 
-//protoc -I protos/proto protos/proto/auth/auth.proto --go_out=./protos/gen/auth --go_opt=paths=source_relative --go-grpc_out=./protos/gen/auth/ --go-grpc_opt=paths=source_relative
+//protoc -I api/protos/proto api/protos/proto/users.proto --go_out=./api/protos/gen/users --go_opt=paths=source_relative --go-grpc_out=./api/protos/gen/users/ --go-grpc_opt=paths=source_relative
 
 package usersv1
 
