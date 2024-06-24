@@ -372,3 +372,19 @@ func (a *UserService) UploadAvatar(ctx context.Context, dto *usersv1.UploadAvata
 		AvatarMiniUrl: imgUrl,
 	}, nil
 }
+
+func (a *UserService) GetImage(ctx context.Context, dto *usersv1.GetAvatarDTO) (*usersv1.GetAvatarRDO, error) {
+	op := "UserService/GetImage"
+	log := a.log.With(
+		slog.String("op", op))
+
+	img, err := a.imgStore.GetFile(ctx, dto.GetFileName())
+	if err != nil {
+		log.Error("can`t upload image: ", err)
+		return nil, fmt.Errorf("%w", err)
+	}
+
+	return &usersv1.GetAvatarRDO{
+		Image: img,
+	}, nil
+}

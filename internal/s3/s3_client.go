@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"io"
 )
 
 const (
@@ -14,6 +15,7 @@ const (
 
 type ImageStore interface {
 	UploadFile(ctx context.Context, fileName string, fileBytes []byte, contentType string) (string, error)
+	GetFile(ctx context.Context, fileName string) ([]byte, error)
 }
 
 type S3Client struct {
@@ -47,4 +49,19 @@ func (s *S3Client) UploadFile(ctx context.Context, fileName string, fileBytes []
 
 	url := fmt.Sprintf("%s/%s/%s", s.minioClient.EndpointURL(), s.bucketName, fileName)
 	return url, nil
+}
+
+func (s *S3Client) GetFile(ctx context.Context, fileName string) ([]byte, error) {
+	object, err := s.minioClient.GetObject(ctx, s.bucketName, fileName, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, err
+	}
+	defer object.Close()
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, object); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }

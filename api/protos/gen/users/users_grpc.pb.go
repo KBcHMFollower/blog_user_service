@@ -29,6 +29,7 @@ const (
 	UsersService_UpdateUser_FullMethodName       = "/users.UsersService/UpdateUser"
 	UsersService_DeleteUser_FullMethodName       = "/users.UsersService/DeleteUser"
 	UsersService_UploadAvatar_FullMethodName     = "/users.UsersService/UploadAvatar"
+	UsersService_GetAvatar_FullMethodName        = "/users.UsersService/GetAvatar"
 )
 
 // UsersServiceClient is the client API for UsersService service.
@@ -43,6 +44,7 @@ type UsersServiceClient interface {
 	UpdateUser(ctx context.Context, in *UpdateUserDTO, opts ...grpc.CallOption) (*UpdateUserRDO, error)
 	DeleteUser(ctx context.Context, in *DeleteUserDTO, opts ...grpc.CallOption) (*DeleteUserRDO, error)
 	UploadAvatar(ctx context.Context, in *UploadAvatarDTO, opts ...grpc.CallOption) (*UploadAvatarRDO, error)
+	GetAvatar(ctx context.Context, in *GetAvatarDTO, opts ...grpc.CallOption) (*GetAvatarRDO, error)
 }
 
 type usersServiceClient struct {
@@ -133,6 +135,16 @@ func (c *usersServiceClient) UploadAvatar(ctx context.Context, in *UploadAvatarD
 	return out, nil
 }
 
+func (c *usersServiceClient) GetAvatar(ctx context.Context, in *GetAvatarDTO, opts ...grpc.CallOption) (*GetAvatarRDO, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAvatarRDO)
+	err := c.cc.Invoke(ctx, UsersService_GetAvatar_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UsersServiceServer is the server API for UsersService service.
 // All implementations must embed UnimplementedUsersServiceServer
 // for forward compatibility
@@ -145,6 +157,7 @@ type UsersServiceServer interface {
 	UpdateUser(context.Context, *UpdateUserDTO) (*UpdateUserRDO, error)
 	DeleteUser(context.Context, *DeleteUserDTO) (*DeleteUserRDO, error)
 	UploadAvatar(context.Context, *UploadAvatarDTO) (*UploadAvatarRDO, error)
+	GetAvatar(context.Context, *GetAvatarDTO) (*GetAvatarRDO, error)
 	mustEmbedUnimplementedUsersServiceServer()
 }
 
@@ -175,6 +188,9 @@ func (UnimplementedUsersServiceServer) DeleteUser(context.Context, *DeleteUserDT
 }
 func (UnimplementedUsersServiceServer) UploadAvatar(context.Context, *UploadAvatarDTO) (*UploadAvatarRDO, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UploadAvatar not implemented")
+}
+func (UnimplementedUsersServiceServer) GetAvatar(context.Context, *GetAvatarDTO) (*GetAvatarRDO, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetAvatar not implemented")
 }
 func (UnimplementedUsersServiceServer) mustEmbedUnimplementedUsersServiceServer() {}
 
@@ -333,6 +349,24 @@ func _UsersService_UploadAvatar_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UsersService_GetAvatar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAvatarDTO)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UsersServiceServer).GetAvatar(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UsersService_GetAvatar_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UsersServiceServer).GetAvatar(ctx, req.(*GetAvatarDTO))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UsersService_ServiceDesc is the grpc.ServiceDesc for UsersService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -371,6 +405,10 @@ var UsersService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UploadAvatar",
 			Handler:    _UsersService_UploadAvatar_Handler,
+		},
+		{
+			MethodName: "GetAvatar",
+			Handler:    _UsersService_GetAvatar_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
