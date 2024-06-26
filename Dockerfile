@@ -6,4 +6,4 @@ COPY . .
 
 RUN go build -o auth cmd/auth/main.go
 
-CMD ["./auth --config=config/config.yaml"]
+CMD ["./auth --config=config/prod.yaml"]

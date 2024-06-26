@@ -1,0 +1,16 @@
+env: "prod"
+storage:
+  connection_string: "host=users-db port=5432 user=postgres password=admin dbname=golang_users sslmode=disable"
+  migration_path: "./migrations"
+grpc:
+  port: 44044
+  timeout: 5s
+jwt:
+  token_ttl: 1h
+  token_secret: "dawsdawsd"
+minio:
+  endpoint : "minio:9000"
+  access_key: "minioadmin"
+  secret_key: "minioadmin"
+  bucket: "mybucket"
+
