@@ -18,23 +18,29 @@ func New(
 	log *slog.Logger,
 	cfg *config.Config,
 ) *App {
+	op := "App.New"
+	appLog := log.With(
+		slog.String("op", op))
 
 	driver, db, err := database.New(cfg.Storage.ConnectionString)
 	if err != nil {
 		log.Error("can`t connect to database", err)
 		panic(err)
 	}
+	appLog.Info("Successfully connected to database")
 
 	if err := database.ForceMigrate(db, cfg.Storage.MigrationPath); err != nil {
 		log.Error("can`t migrate database", err)
 		panic(err)
 	}
+	appLog.Info("Successfully migrated database")
 
 	s3Client, err := s3client.New(cfg.Minio.Endpoint, cfg.Minio.AccessKey, cfg.Minio.SecretKey, cfg.Minio.Bucket)
 	if err != nil {
 		log.Error("can`t create S3 client", err)
 		panic(err)
 	}
+	appLog.Info("Successfully created S3 client")
 
 	userRepository, err := repository.NewUserRepository(driver)
 	if err != nil {
@@ -45,6 +51,7 @@ func New(
 	authService := auth_service.New(log, cfg.JWT.TokenTTL, cfg.JWT.TokenSecret, userRepository, s3Client)
 
 	grpcApp := grpcapp.New(log, cfg.GRpc.Port, authService)
+	appLog.Info("Successfully created GRPC app")
 
 	return &App{
 		GRpcServer: grpcApp,

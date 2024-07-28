@@ -2,8 +2,14 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
 	"github.com/google/uuid"
+)
+
+var (
+	ErrUserNotFound      = errors.New("user not found")
+	ErrUserAlreadyExists = errors.New("user already exists")
 )
 
 type UpdateInfo struct {

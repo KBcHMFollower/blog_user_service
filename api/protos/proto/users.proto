@@ -15,7 +15,6 @@ service UsersService{
   rpc UpdateUser (UpdateUserDTO) returns (UpdateUserRDO);
   rpc DeleteUser (DeleteUserDTO) returns (DeleteUserRDO);
   rpc UploadAvatar (UploadAvatarDTO) returns (UploadAvatarRDO);
-  rpc GetAvatar (GetAvatarDTO) returns (GetAvatarRDO);
 }
 
 message User{
@@ -30,18 +29,9 @@ message User{
   bool is_deleted =9;
 }
 
-message GetAvatarDTO{
-  string fileName = 1;
-}
-
-message GetAvatarRDO{
-  bytes image = 1;
-}
-
 message UploadAvatarDTO{
   string user_id = 1;
   bytes image = 2;
-  string baseUrl = 3;
 }
 
 message UploadAvatarRDO{

@@ -3,12 +3,13 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/KBcHMFollower/blog_user_service/database"
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
-	"time"
 )
 
 const (
@@ -32,6 +33,8 @@ func NewUserRepository(dbDriver database.DBWrapper) (*UserRepository, error) {
 }
 
 func (r *UserRepository) getSubInfo(ctx context.Context, userId uuid.UUID, page uint64, size uint64, targetType string) ([]*models.Subscriber, uint32, error) {
+	op := "UserRepository.getSubInfo"
+
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	subscribers := make([]*models.Subscriber, 0)
 
@@ -46,12 +49,12 @@ func (r *UserRepository) getSubInfo(ctx context.Context, userId uuid.UUID, page 
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return subscribers, 0, fmt.Errorf("error in generate sql-query : %v", err)
+		return subscribers, 0, fmt.Errorf("%s : %w", op, err)
 	}
 
 	rows, err := r.db.QueryContext(ctx, sql, args...)
 	if err != nil {
-		return subscribers, 0, fmt.Errorf("error in quey for db: %v", err)
+		return subscribers, 0, fmt.Errorf("%s : %w", op, err)
 	}
 	defer rows.Close()
 
@@ -73,20 +76,22 @@ func (r *UserRepository) getSubInfo(ctx context.Context, userId uuid.UUID, page 
 
 	sql, args, err = query.ToSql()
 	if err != nil {
-		return subscribers, 0, fmt.Errorf("error in generate sql-query : %v", err)
+		return subscribers, 0, fmt.Errorf("%s : %w", op, err)
 	}
 
 	var totalCount uint32
 
 	countRow := r.db.QueryRowContext(ctx, sql, args...)
 	if err := countRow.Scan(&totalCount); err != nil {
-		return nil, 0, fmt.Errorf("can`t scan properties from db : %v", err)
+		return nil, 0, fmt.Errorf("%s : %w", op, err)
 	}
 
 	return subscribers, totalCount, nil
 }
 
 func (r *UserRepository) CreateUser(ctx context.Context, createDto *CreateUserDto) (uuid.UUID, error) {
+	op := "UserRepository.CreateUser"
+
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	user := models.NewUserModel(createDto.Email, createDto.FName, createDto.LName, createDto.HashPass)
@@ -105,7 +110,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, createDto *CreateUserDt
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	row := r.db.QueryRowContext(ctx, sql, args...)
@@ -114,13 +119,14 @@ func (r *UserRepository) CreateUser(ctx context.Context, createDto *CreateUserDt
 
 	err = row.Scan(&id)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	return id, nil
 }
 
 func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	op := "UserRepository.GetUserByEmail"
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	sql, args, err := builder.Select("*").
@@ -128,7 +134,7 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 		Where(squirrel.Eq{"email": email}).
 		ToSql()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	var user models.User
@@ -137,13 +143,14 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 
 	err = row.Scan(user.GetPointersArray()...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	return &user, nil
 }
 
 func (r *UserRepository) GetUserById(ctx context.Context, userId uuid.UUID) (*models.User, error) {
+	op := "UserRepository.GetUserById"
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	sql, args, err := builder.Select("*").
@@ -151,7 +158,7 @@ func (r *UserRepository) GetUserById(ctx context.Context, userId uuid.UUID) (*mo
 		Where(squirrel.Eq{"id": userId}).
 		ToSql()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	var user models.User
@@ -160,19 +167,21 @@ func (r *UserRepository) GetUserById(ctx context.Context, userId uuid.UUID) (*mo
 
 	err = row.Scan(user.GetPointersArray()...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	return &user, nil
 }
 
 func (r *UserRepository) GetUserSubscribers(ctx context.Context, userId uuid.UUID, page uint64, size uint64) ([]*models.User, uint32, error) {
+	op := "UserRepository.GetUserSubscribers"
+
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	users := make([]*models.User, 0)
 
 	subscribers, totalCount, err := r.getSubInfo(ctx, userId, page, size, "blogger_id")
 	if err != nil {
-		return users, totalCount, err
+		return users, totalCount, fmt.Errorf("%s : %w", op, err)
 	}
 
 	subscribersId := make([]uuid.UUID, 0)
@@ -184,10 +193,13 @@ func (r *UserRepository) GetUserSubscribers(ctx context.Context, userId uuid.UUI
 		From(USERS_TABLE_NAME).
 		Where(squirrel.Eq{"id": subscribersId}).
 		ToSql()
+	if err != nil {
+		return users, totalCount, fmt.Errorf("%s : %w", op, err)
+	}
 
 	rows, err := r.db.QueryContext(ctx, sql, args...)
 	if err != nil {
-		return users, 0, fmt.Errorf("error in generate sql-query : %v", err)
+		return users, 0, fmt.Errorf("%s : %w", op, err)
 	}
 	defer rows.Close()
 
@@ -195,7 +207,7 @@ func (r *UserRepository) GetUserSubscribers(ctx context.Context, userId uuid.UUI
 		var user models.User
 		err = rows.Scan(user.GetPointersArray()...)
 		if err != nil {
-			return users, 0, fmt.Errorf("error in parse post from db : %v", err)
+			return users, 0, fmt.Errorf("%s : %w", op, err)
 		}
 		users = append(users, &user)
 	}
@@ -204,12 +216,14 @@ func (r *UserRepository) GetUserSubscribers(ctx context.Context, userId uuid.UUI
 }
 
 func (r *UserRepository) GetUserSubscriptions(ctx context.Context, userId uuid.UUID, page uint64, size uint64) ([]*models.User, uint32, error) {
+	op := "UserRepository.GetUserSubscribers"
+
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	users := make([]*models.User, 0)
 
 	subscribers, totalCount, err := r.getSubInfo(ctx, userId, page, size, "subscriber_id")
 	if err != nil {
-		return users, totalCount, err
+		return users, totalCount, fmt.Errorf("%s : %w", op, err)
 	}
 
 	subscribersId := make([]uuid.UUID, 0)
@@ -224,7 +238,7 @@ func (r *UserRepository) GetUserSubscriptions(ctx context.Context, userId uuid.U
 
 	rows, err := r.db.QueryContext(ctx, sql, args...)
 	if err != nil {
-		return users, 0, fmt.Errorf("error in generate sql-query : %v", err)
+		return users, 0, fmt.Errorf("%s : %w", op, err)
 	}
 	defer rows.Close()
 
@@ -232,7 +246,7 @@ func (r *UserRepository) GetUserSubscriptions(ctx context.Context, userId uuid.U
 		var user models.User
 		err = rows.Scan(user.GetPointersArray()...)
 		if err != nil {
-			return users, 0, fmt.Errorf("error in parse post from db : %v", err)
+			return users, 0, fmt.Errorf("%s : %w", op, err)
 		}
 		users = append(users, &user)
 	}
@@ -241,6 +255,7 @@ func (r *UserRepository) GetUserSubscriptions(ctx context.Context, userId uuid.U
 }
 
 func (r *UserRepository) UpdateUser(ctx context.Context, updateData UpdateData) (*models.User, error) {
+	op := "UserRepository.UpdateUser"
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	query := builder.
@@ -257,12 +272,12 @@ func (r *UserRepository) UpdateUser(ctx context.Context, updateData UpdateData) 
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("error in generate sql-query : %v", err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	_, err = r.db.ExecContext(ctx, sql, args...)
 	if err != nil {
-		return nil, fmt.Errorf("error in execute sql-query : %v", err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	queryGetPost := builder.
@@ -276,13 +291,14 @@ func (r *UserRepository) UpdateUser(ctx context.Context, updateData UpdateData) 
 	var user models.User
 	err = row.Scan(user.GetPointersArray()...)
 	if err != nil {
-		return nil, fmt.Errorf("error scanning updated post : %v", err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	return &user, nil
 }
 
 func (r *UserRepository) Subscribe(ctx context.Context, bloggerId uuid.UUID, subscriberId uuid.UUID) error {
+	op := "UserRepository.Subscribe"
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	subscribers := models.NewSubscriber(bloggerId, subscriberId)
@@ -293,18 +309,19 @@ func (r *UserRepository) Subscribe(ctx context.Context, bloggerId uuid.UUID, sub
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("error in generate sql-query : %v", err)
+		return fmt.Errorf("%s : %w", op, err)
 	}
 
 	_, err = r.db.ExecContext(ctx, sql, args...)
 	if err != nil {
-		return fmt.Errorf("error in execute sql-query : %v", err)
+		return fmt.Errorf("%s : %w", op, err)
 	}
 
 	return nil
 }
 
 func (r *UserRepository) Unsubscribe(ctx context.Context, bloggerId uuid.UUID, subscriberId uuid.UUID) error {
+	op := "UserRepository.Unsubscribe"
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	query := builder.Delete(SUBSCRIBERS_TABLE_NAME).
@@ -312,18 +329,19 @@ func (r *UserRepository) Unsubscribe(ctx context.Context, bloggerId uuid.UUID, s
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("error in generate sql-query : %v", err)
+		return fmt.Errorf("%s : %w", op, err)
 	}
 
 	_, err = r.db.ExecContext(ctx, sql, args...)
 	if err != nil {
-		return fmt.Errorf("error in execute sql-query : %v", err)
+		return fmt.Errorf("%s : %w", op, err)
 	}
 
 	return nil
 }
 
 func (r *UserRepository) DeleteUser(ctx context.Context, userId uuid.UUID) error {
+	op := "UserRepository.DeleteUser"
 	_, err := r.UpdateUser(ctx, UpdateData{
 		Id: userId,
 		UpdateInfo: []*UpdateInfo{
@@ -335,7 +353,7 @@ func (r *UserRepository) DeleteUser(ctx context.Context, userId uuid.UUID) error
 	})
 
 	if err != nil {
-		return fmt.Errorf("error in delete user : %v", err)
+		return fmt.Errorf("%s : %w", op, err)
 	}
 
 	return nil

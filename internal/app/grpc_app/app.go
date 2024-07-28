@@ -54,8 +54,6 @@ func (a *App) Run() error {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	log.Info("grpc server is get up ", slog.Int("port", 1212))
-
 	return nil
 }
 

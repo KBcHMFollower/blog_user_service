@@ -21,7 +21,7 @@ type DBDriver struct {
 func New(connectionString string) (*DBDriver, *sql.DB, error) {
 	db, err := sql.Open("postgres", connectionString)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Error in process db connection : %v", err)
+		return nil, nil, fmt.Errorf("Error in process db connection : %w", err)
 	}
 
 	return &DBDriver{db}, db, nil

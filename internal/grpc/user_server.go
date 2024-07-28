@@ -42,7 +42,3 @@ func (s *GRPCUsers) Unsubscribe(ctx context.Context, req *usersv1.SubscribeDTO) 
 func (s *GRPCUsers) UploadAvatar(ctx context.Context, req *usersv1.UploadAvatarDTO) (*usersv1.UploadAvatarRDO, error) {
 	return s.userService.UploadAvatar(ctx, req)
 }
-
-func (s *GRPCUsers) GetAvatar(ctx context.Context, req *usersv1.GetAvatarDTO) (*usersv1.GetAvatarRDO, error) {
-	return s.userService.GetImage(ctx, req)
-}

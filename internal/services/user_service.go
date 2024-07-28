@@ -47,7 +47,7 @@ func (a *UserService) RegisterUser(ctx context.Context, req *ssov1.RegisterDTO) 
 	hashPass, err := bcrypt.GenerateFromPassword([]byte(req.GetPassword()), bcrypt.DefaultCost)
 	if err != nil {
 		log.Error("can`t generate hashPass: ", err)
-		return "", fmt.Errorf("%w", err)
+		return "", fmt.Errorf("%s : %w", op, err)
 	}
 
 	userId, err := a.userRep.CreateUser(ctx, &repository.CreateUserDto{
@@ -58,13 +58,13 @@ func (a *UserService) RegisterUser(ctx context.Context, req *ssov1.RegisterDTO) 
 	})
 	if err != nil {
 		log.Error("can`t create user in db: ", err)
-		return "", fmt.Errorf("%w", err)
+		return "", fmt.Errorf("%s : %w", op, err)
 	}
 
 	token, err := tokens_helper.CreateNewJwt(userId, req.GetEmail(), a.tokenTtl, a.tokenSecret)
 	if err != nil {
 		log.Error("can`t create jwt: ", err)
-		return "", fmt.Errorf("%w", err)
+		return "", fmt.Errorf("%s : %w", op, err)
 	}
 
 	return token, nil
@@ -82,19 +82,19 @@ func (a *UserService) LoginUser(ctx context.Context, email string, password stri
 	user, err := a.userRep.GetUserByEmail(ctx, email)
 	if err != nil {
 		log.Error("can`t get user from db: ", err)
-		return "", fmt.Errorf("%w", err)
+		return "", fmt.Errorf("%s : %w", op, err)
 	}
 
 	err = bcrypt.CompareHashAndPassword(user.PassHash, []byte(password))
 	if err != nil {
 		log.Error("passwords not eq: ", err)
-		return "", fmt.Errorf("%w", err)
+		return "", fmt.Errorf("%s : %w", op, err)
 	}
 
 	token, err := tokens_helper.CreateNewJwt(user.Id, user.Email, a.tokenTtl, a.tokenSecret)
 	if err != nil {
 		log.Error("can`t generate jwt: ", err)
-		return "", fmt.Errorf("%w", err)
+		return "", fmt.Errorf("%s : %w", op, err)
 	}
 
 	return token, nil
@@ -111,23 +111,23 @@ func (a *UserService) CheckAuth(ctx context.Context, token string) (string, erro
 	parsedToken, err := tokens_helper.Parse(token, a.tokenSecret)
 	if err != nil {
 		log.Error("can`t parse token: ", err)
-		return "", fmt.Errorf("%w", err)
+		return "", fmt.Errorf("%s : %w", op, err)
 	}
 	if !parsedToken.Valid {
 		log.Error("token is invalid: ", err)
-		return "", fmt.Errorf("%w", err)
+		return "", fmt.Errorf("%s : %w", op, err)
 	}
 
 	tokenClaims, err := tokens_helper.GetClaimsValues(parsedToken)
 	if err != nil {
 		log.Error("can`t  parse jwt claims: ", err)
-		return "", fmt.Errorf("%w", err)
+		return "", fmt.Errorf("%s : %w", op, err)
 	}
 
 	newToken, err := tokens_helper.CreateNewJwt(tokenClaims.Id, tokenClaims.Email, a.tokenTtl, a.tokenSecret)
 	if err != nil {
 		log.Error("can`t create jwt: ", err)
-		return "", fmt.Errorf("%w", err)
+		return "", fmt.Errorf("%s : %w", op, err)
 	}
 
 	return newToken, nil
@@ -143,13 +143,13 @@ func (a *UserService) GetUserById(ctx context.Context, dto *usersv1.GetUserDTO) 
 	userUUID, err := uuid.Parse(dto.GetId())
 	if err != nil {
 		log.Error("can`t parse user uuid: ", err)
-		return nil, fmt.Errorf("%w", err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	user, err := a.userRep.GetUserById(ctx, userUUID)
 	if err != nil {
 		log.Error("can`t get user from db: ", err)
-		return nil, fmt.Errorf("%w", err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	return &usersv1.GetUserRDO{
@@ -165,13 +165,13 @@ func (a *UserService) GetSubscribers(ctx context.Context, dto *usersv1.GetSubscr
 	bloggerUUID, err := uuid.Parse(dto.GetBloggerId())
 	if err != nil {
 		log.Error("can`t parse blogger uuid: ", err)
-		return nil, fmt.Errorf("%w", err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	users, totalCount, err := a.userRep.GetUserSubscribers(ctx, bloggerUUID, uint64(dto.GetPage()), uint64(dto.GetSize()))
 	if err != nil {
 		log.Error("can`t get user subscribers from db: ", err)
-		return nil, fmt.Errorf("%w", err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	return &usersv1.GetSubscribersRDO{
@@ -187,14 +187,14 @@ func (a *UserService) GetSubscriptions(ctx context.Context, dto *usersv1.GetSubs
 
 	subscriberUUID, err := uuid.Parse(dto.GetSubscriberId())
 	if err != nil {
-		log.Error("can`t parse blogger uuid: ", err)
-		return nil, fmt.Errorf("%w", err)
+		log.Error("can`t parse subscriber uuid: ", err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	users, totalCount, err := a.userRep.GetUserSubscriptions(ctx, subscriberUUID, uint64(dto.GetPage()), uint64(dto.GetSize()))
 	if err != nil {
-		log.Error("can`t get user subscribers from db: ", err)
-		return nil, fmt.Errorf("%w", err)
+		log.Error("can`t get user bloggers from db: ", err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	return &usersv1.GetSubscriptionsRDO{
@@ -210,8 +210,8 @@ func (a *UserService) UpdateUser(ctx context.Context, dto *usersv1.UpdateUserDTO
 
 	userUUID, err := uuid.Parse(dto.GetId())
 	if err != nil {
-		log.Error("can`t parse blogger uuid: ", err)
-		return nil, fmt.Errorf("%w", err)
+		log.Error("can`t parse user uuid: ", err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	var updateItems = make([]*repository.UpdateInfo, 0)
@@ -228,7 +228,7 @@ func (a *UserService) UpdateUser(ctx context.Context, dto *usersv1.UpdateUserDTO
 	})
 	if err != nil {
 		log.Error("can`t update user in db: ", err)
-		return nil, fmt.Errorf("%w", err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	return &usersv1.UpdateUserRDO{
@@ -246,7 +246,7 @@ func (a *UserService) Subscribe(ctx context.Context, dto *usersv1.SubscribeDTO) 
 		log.Error("can`t parse blogger uuid: ", err)
 		return &usersv1.SubscribeRDO{
 			IsSubscribe: false,
-		}, err
+		}, fmt.Errorf("%s : %w", op, err)
 	}
 
 	subscriberUUID, err := uuid.Parse(dto.GetSubscriberId())
@@ -254,7 +254,7 @@ func (a *UserService) Subscribe(ctx context.Context, dto *usersv1.SubscribeDTO) 
 		log.Error("can`t parse subscriber uuid: ", err)
 		return &usersv1.SubscribeRDO{
 			IsSubscribe: false,
-		}, err
+		}, fmt.Errorf("%s : %w", op, err)
 	}
 
 	err = a.userRep.Subscribe(ctx, bloggerUUID, subscriberUUID)
@@ -262,7 +262,7 @@ func (a *UserService) Subscribe(ctx context.Context, dto *usersv1.SubscribeDTO) 
 		log.Error("can`t subscribe to user in db: ", err)
 		return &usersv1.SubscribeRDO{
 			IsSubscribe: false,
-		}, err
+		}, fmt.Errorf("%s : %w", op, err)
 	}
 
 	return &usersv1.SubscribeRDO{
@@ -280,7 +280,7 @@ func (a *UserService) Unsubscribe(ctx context.Context, dto *usersv1.SubscribeDTO
 		log.Error("can`t parse blogger uuid: ", err)
 		return &usersv1.SubscribeRDO{
 			IsSubscribe: false,
-		}, err
+		}, fmt.Errorf("%s : %w", op, err)
 	}
 
 	subscriberUUID, err := uuid.Parse(dto.GetSubscriberId())
@@ -288,15 +288,15 @@ func (a *UserService) Unsubscribe(ctx context.Context, dto *usersv1.SubscribeDTO
 		log.Error("can`t parse subscriber uuid: ", err)
 		return &usersv1.SubscribeRDO{
 			IsSubscribe: false,
-		}, err
+		}, fmt.Errorf("%s : %w", op, err)
 	}
 
 	err = a.userRep.Unsubscribe(ctx, bloggerUUID, subscriberUUID)
 	if err != nil {
-		log.Error("can`t subscribe to user in db: ", err)
+		log.Error("can`t unsubscribe in db: ", err)
 		return &usersv1.SubscribeRDO{
 			IsSubscribe: false,
-		}, err
+		}, fmt.Errorf("%s : %w", op, err)
 	}
 
 	return &usersv1.SubscribeRDO{
@@ -311,10 +311,10 @@ func (a *UserService) DeleteUser(ctx context.Context, dto *usersv1.DeleteUserDTO
 
 	userUUID, err := uuid.Parse(dto.GetId())
 	if err != nil {
-		log.Error("can`t parse blogger uuid: ", err)
+		log.Error("can`t parse user uuid: ", err)
 		return &usersv1.DeleteUserRDO{
 			IsDeleted: false,
-		}, err
+		}, fmt.Errorf("%s : %w", op, err)
 	}
 
 	err = a.userRep.DeleteUser(ctx, userUUID)
@@ -322,7 +322,7 @@ func (a *UserService) DeleteUser(ctx context.Context, dto *usersv1.DeleteUserDTO
 		log.Error("can`t delete user in db: ", err)
 		return &usersv1.DeleteUserRDO{
 			IsDeleted: false,
-		}, err
+		}, fmt.Errorf("%s : %w", op, err)
 	}
 
 	return &usersv1.DeleteUserRDO{
@@ -337,14 +337,14 @@ func (a *UserService) UploadAvatar(ctx context.Context, dto *usersv1.UploadAvata
 
 	userUUID, err := uuid.Parse(dto.GetUserId())
 	if err != nil {
-		log.Error("can`t parse blogger uuid: ", err)
-		return nil, fmt.Errorf("%w", err)
+		log.Error("can`t parse user uuid: ", err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
-	imgUrl, err := a.imgStore.UploadFile(ctx, fmt.Sprintf("%s.jpeg", uuid.New().String()), dto.GetBaseUrl(), dto.GetImage(), s3client.ImageJpeg)
+	imgUrl, err := a.imgStore.UploadFile(ctx, fmt.Sprintf("%s.jpeg", uuid.New().String()), dto.GetImage(), s3client.ImageJpeg)
 	if err != nil {
 		log.Error("can`t upload image: ", err)
-		return nil, fmt.Errorf("%w", err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	//TODO
@@ -363,28 +363,12 @@ func (a *UserService) UploadAvatar(ctx context.Context, dto *usersv1.UploadAvata
 	})
 	if err != nil {
 		log.Error("can`t update user in db: ", err)
-		return nil, fmt.Errorf("%w", err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	return &usersv1.UploadAvatarRDO{
 		UserId:        dto.GetUserId(),
 		AvatarUrl:     imgUrl,
 		AvatarMiniUrl: imgUrl,
-	}, nil
-}
-
-func (a *UserService) GetImage(ctx context.Context, dto *usersv1.GetAvatarDTO) (*usersv1.GetAvatarRDO, error) {
-	op := "UserService/GetImage"
-	log := a.log.With(
-		slog.String("op", op))
-
-	img, err := a.imgStore.GetFile(ctx, dto.GetFileName())
-	if err != nil {
-		log.Error("can`t upload image: ", err)
-		return nil, fmt.Errorf("%w", err)
-	}
-
-	return &usersv1.GetAvatarRDO{
-		Image: img,
 	}, nil
 }
