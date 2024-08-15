@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/KBcHMFollower/blog_user_service/internal/cashe"
 	"time"
 
 	"github.com/KBcHMFollower/blog_user_service/database"
@@ -15,6 +17,9 @@ import (
 const (
 	USERS_TABLE_NAME       = "users"
 	SUBSCRIBERS_TABLE_NAME = "subscribers"
+	TE_TABLE_NAME          = "transaction_events"
+
+	USERS_CASHE_PREFIX = "userId-"
 )
 
 type CreateUserDto struct {
@@ -25,11 +30,12 @@ type CreateUserDto struct {
 }
 
 type UserRepository struct {
-	db database.DBWrapper
+	db    database.DBWrapper
+	cashe cashe.CasheStorage
 }
 
-func NewUserRepository(dbDriver database.DBWrapper) (*UserRepository, error) {
-	return &UserRepository{db: dbDriver}, nil
+func NewUserRepository(dbDriver database.DBWrapper, casheStorage cashe.CasheStorage) (*UserRepository, error) {
+	return &UserRepository{db: dbDriver, cashe: casheStorage}, nil
 }
 
 func (r *UserRepository) getSubInfo(ctx context.Context, userId uuid.UUID, page uint64, size uint64, targetType string) ([]*models.Subscriber, uint32, error) {
@@ -151,6 +157,11 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 
 func (r *UserRepository) GetUserById(ctx context.Context, userId uuid.UUID) (*models.User, error) {
 	op := "UserRepository.GetUserById"
+
+	if user, err := r.tryGetUserFromCashe(ctx, userId); err == nil {
+		return user, nil
+	}
+
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	sql, args, err := builder.Select("*").
@@ -168,6 +179,10 @@ func (r *UserRepository) GetUserById(ctx context.Context, userId uuid.UUID) (*mo
 	err = row.Scan(user.GetPointersArray()...)
 	if err != nil {
 		return nil, fmt.Errorf("%s : %w", op, err)
+	}
+
+	if err := r.SetUserToCashe(ctx, &user); err != nil {
+		return &user, err
 	}
 
 	return &user, nil
@@ -294,6 +309,10 @@ func (r *UserRepository) UpdateUser(ctx context.Context, updateData UpdateData) 
 		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
+	if err := r.DeleteUserFromCashe(ctx, updateData.Id); err != nil {
+		return &user, nil
+	}
+
 	return &user, nil
 }
 
@@ -342,16 +361,100 @@ func (r *UserRepository) Unsubscribe(ctx context.Context, bloggerId uuid.UUID, s
 
 func (r *UserRepository) DeleteUser(ctx context.Context, userId uuid.UUID) error {
 	op := "UserRepository.DeleteUser"
-	_, err := r.UpdateUser(ctx, UpdateData{
-		Id: userId,
-		UpdateInfo: []*UpdateInfo{
-			&UpdateInfo{
-				Name:  "is_deleted",
-				Value: "true",
-			},
-		},
-	})
 
+	user, err := r.GetUserById(ctx, userId)
+	if err != nil {
+		return fmt.Errorf("%s : %w", op, err)
+	}
+
+	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("%s : %w", op, err)
+	}
+	defer func() { //TODO
+		if err != nil {
+			if txErr := tx.Rollback(); txErr != nil {
+				err = fmt.Errorf("%s : %w", op, txErr)
+			}
+		}
+	}()
+
+	query := builder.Delete(USERS_TABLE_NAME).Where(squirrel.Eq{"id": userId})
+	sql, args, err := query.ToSql()
+
+	if _, err := tx.ExecContext(ctx, sql, args...); err != nil {
+		return fmt.Errorf("%s : %w", op, err)
+	}
+
+	eventPayload, err := json.Marshal(user)
+	if err != nil {
+		return fmt.Errorf("%s : %w", op, err)
+	}
+
+	insertBuilder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	insertQuery := insertBuilder.Insert(TE_TABLE_NAME).
+		SetMap(map[string]interface{}{
+			"event_id":   uuid.New(),
+			"event_type": "userDeleted",
+			"payload":    string(eventPayload),
+		})
+
+	sql, args, err = insertQuery.ToSql()
+	if err != nil {
+		return fmt.Errorf("%s : %w", op, err)
+	}
+
+	_, err = tx.ExecContext(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("%s : %w", op, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("%s : %w", op, err)
+	}
+
+	return nil
+}
+
+func (r *UserRepository) tryGetUserFromCashe(ctx context.Context, id uuid.UUID) (*models.User, error) {
+	op := "UserRepository.tryGetUserFromCashe"
+
+	data, err := r.cashe.Get(ctx, fmt.Sprintf("%s%s", USERS_CASHE_PREFIX, id.String()))
+	if err != nil {
+		return nil, fmt.Errorf("%s : %w", op, err)
+	}
+
+	var user *models.User
+
+	if err := json.Unmarshal([]byte(data), &user); err != nil {
+		return nil, fmt.Errorf("%s : %w", op, err)
+	}
+
+	return user, nil
+}
+
+func (r *UserRepository) SetUserToCashe(ctx context.Context, user *models.User) error {
+	op := "UserRepository.SetUserToCashe"
+
+	userJson, err := json.Marshal(user)
+	if err != nil {
+		return fmt.Errorf("%s : %w", op, err)
+	}
+
+	err = r.cashe.Set(ctx, fmt.Sprintf("%s%s", USERS_CASHE_PREFIX, user.Id.String()), userJson)
+	if err != nil {
+		return fmt.Errorf("%s : %w", op, err)
+	}
+
+	return nil
+}
+
+func (r *UserRepository) DeleteUserFromCashe(ctx context.Context, id uuid.UUID) error {
+	op := "UserRepository.DeleteUserFromCashe"
+
+	err := r.cashe.Delete(ctx, fmt.Sprintf("%s%s", USERS_CASHE_PREFIX, id.String()))
 	if err != nil {
 		return fmt.Errorf("%s : %w", op, err)
 	}

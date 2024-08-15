@@ -33,3 +33,8 @@ type UserStore interface {
 	Unsubscribe(ctx context.Context, bloggerId uuid.UUID, subscriberId uuid.UUID) error
 	DeleteUser(ctx context.Context, userId uuid.UUID) error
 }
+
+type EventStore interface {
+	GetEvents(ctx context.Context, filterTarget string, filterValue interface{}, limit uint64) ([]*models.EventInfo, error)
+	SetSentStatusesInEvents(ctx context.Context, eventsId []uuid.UUID) error
+}

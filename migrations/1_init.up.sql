@@ -24,3 +24,13 @@ CREATE TABLE IF NOT EXISTS subscribers
 );
 CREATE INDEX IF NOT EXISTS inx_blogger_id ON subscribers(blogger_id);
 CREATE INDEX IF NOT EXISTS inx_subscriber_id ON subscribers(subscriber_id);
+
+CREATE TABLE IF NOT EXISTS transaction_events
+(
+    event_id UUID PRIMARY KEY ,
+    event_type TEXT NOT NULL ,
+    payload JSON NULL,
+    status TEXT NOT NULL  DEFAULT 'waiting',
+    retry_count INT DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_done ON transaction_events(status);

@@ -9,11 +9,13 @@ import (
 )
 
 type Config struct {
-	Env     string  `yaml:"env" env-default:"local"`
-	GRpc    GRPC    `yaml:"grpc" env-required:"true"`
-	Storage Storage `yaml:"storage" env-required:"true"`
-	JWT     JWT     `yaml:"jwt" env-required:"true"`
-	Minio   Minio   `yaml:"minio" env-required:"true"`
+	Env      string   `yaml:"env" env-default:"local"`
+	GRpc     GRPC     `yaml:"grpc" env-required:"true"`
+	Storage  Storage  `yaml:"storage" env-required:"true"`
+	JWT      JWT      `yaml:"jwt" env-required:"true"`
+	Minio    Minio    `yaml:"minio" env-required:"true"`
+	Redis    Redis    `yaml:"redis" env-required:"true"`
+	RabbitMq RabbitMq `yaml:"rabbitmq" env-required:"true"`
 }
 
 type Minio struct {
@@ -31,6 +33,17 @@ type GRPC struct {
 type JWT struct {
 	TokenTTL    time.Duration `yaml:"token_ttl" env-default:"1h"`
 	TokenSecret string        `yaml:"token_secret" env-default:"secret"`
+}
+
+type Redis struct {
+	Addr     string        `yaml:"addr" env-required:"true"`
+	Password string        `yaml:"password" env-default:""`
+	DB       int           `yaml:"db" env-default:"0"`
+	CacheTTL time.Duration `yaml:"cache_ttl" env-default:"1h"`
+}
+
+type RabbitMq struct {
+	Addr string `yaml:"addr" env-required:"true"`
 }
 
 type Storage struct {

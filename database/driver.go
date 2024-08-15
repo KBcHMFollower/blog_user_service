@@ -12,6 +12,7 @@ type DBWrapper interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
 }
 
 type DBDriver struct {
@@ -23,6 +24,5 @@ func New(connectionString string) (*DBDriver, *sql.DB, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("Error in process db connection : %w", err)
 	}
-
 	return &DBDriver{db}, db, nil
 }

@@ -13,4 +13,11 @@ minio:
   access_key: "minioadmin"
   secret_key: "minioadmin"
   bucket: "mybucket"
+redis:
+  addr : "localhost:6379"
+  password : ""
+  db : 0
+  cache_ttl: 1h
+rabbitMq:
+  addr: "amqp://localhost:5672"
 
