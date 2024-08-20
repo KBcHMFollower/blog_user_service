@@ -1,7 +1,8 @@
-package amqp_client
+package rabbitmqclient
 
 import (
 	"fmt"
+	"github.com/KBcHMFollower/blog_user_service/internal/amqp_client"
 	"github.com/streadway/amqp"
 )
 
@@ -13,43 +14,92 @@ const (
 )
 
 type RabbitMQClient struct {
-	senderMap map[string]AmqpSender
-	conn      *amqp.Connection
-	ch        *amqp.Channel
+	pubConn        *amqp.Connection
+	pubCh          *amqp.Channel
+	consConn       *amqp.Connection
+	consCh         *amqp.Channel
+	sendersFactory amqp_client.AmqpSenderFactory
 }
 
 func NewRabbitMQClient(addr string) (*RabbitMQClient, error) {
-	conn, err := amqp.Dial(addr)
+	pConn, err := amqp.Dial(addr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to RabbitMQ: %s", err)
+	}
+	cConn, err := amqp.Dial(addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to RabbitMQ: %s", err)
 	}
 
-	ch, err := conn.Channel()
+	pCh, err := pConn.Channel()
+	if err != nil {
+		return nil, fmt.Errorf("failed to open a channel: %s", err)
+	}
+	cCh, err := cConn.Channel()
 	if err != nil {
 		return nil, fmt.Errorf("failed to open a channel: %s", err)
 	}
 
-	senderMap := map[string]AmqpSender{
-		"userDeleted": &UserDeletedSender{ch: ch},
-	}
-
-	if err := DeclareExchanges(ch); err != nil {
+	if err := DeclareExchanges(pCh); err != nil {
 		return nil, fmt.Errorf("failed to declare exchanges: %s", err)
 	}
-	if err := DeclareQueues(ch); err != nil {
+	if err := DeclareQueues(pCh); err != nil {
 		return nil, fmt.Errorf("failed to declare queues: %s", err)
 	}
 
-	return &RabbitMQClient{ch: ch, conn: conn, senderMap: senderMap}, nil
+	sendersFactory := NewSendersStore(pCh)
+
+	return &RabbitMQClient{pubConn: cConn, consConn: cConn, pubCh: pCh, consCh: cCh, sendersFactory: sendersFactory}, nil
 }
 
 func (rc *RabbitMQClient) Close() error {
-	if err := rc.ch.Close(); err != nil {
+	if err := rc.pubCh.Close(); err != nil {
 		return fmt.Errorf("failed to close RabbitMQ channel: %s", err)
 	}
-	if err := rc.conn.Close(); err != nil {
+	if err := rc.pubConn.Close(); err != nil {
 		return fmt.Errorf("failed to close RabbitMQ connection: %s", err)
 	}
+	if err := rc.consCh.Close(); err != nil {
+		return fmt.Errorf("failed to close RabbitMQ channel: %s", err)
+	}
+	if err := rc.consConn.Close(); err != nil {
+		return fmt.Errorf("failed to close RabbitMQ connection: %s", err)
+	}
+
+	return nil
+}
+
+func (rc *RabbitMQClient) Publish(eventType string, body []byte) error {
+	sender, err := rc.sendersFactory.GetSender(eventType)
+	if err != nil {
+		return fmt.Errorf("failed to get sender for event %s: %s", eventType, err)
+	}
+
+	if err := sender.Send(body); err != nil {
+		return fmt.Errorf("failed to send event %s: %s", eventType, err)
+	}
+
+	return nil
+}
+
+func (rc *RabbitMQClient) Consume(queueName string, handler amqp_client.AmqpHandlerFunc) error {
+	del, err := rc.consCh.Consume(
+		queueName,
+		"",
+		false,
+		false,
+		false,
+		false,
+		nil)
+	if err != nil {
+		return fmt.Errorf("failed to register a consumer for queue %s: %s", queueName, err)
+	}
+
+	go func() {
+		for d := range del {
+			handler(d.Body)
+		}
+	}()
 
 	return nil
 }
@@ -136,36 +186,6 @@ func DeclareQueues(ch *amqp.Channel) error {
 		nil,
 	); err != nil {
 		return fmt.Errorf("failed to bind UserDeleted queue: %s", err)
-	}
-
-	return nil
-}
-
-func (rc *RabbitMQClient) GetSender(senderName string) (AmqpSender, error) {
-	sender, ok := rc.senderMap[senderName]
-	if !ok {
-		return nil, fmt.Errorf("sender not found for sender %s", senderName)
-	}
-
-	return sender, nil
-}
-
-type UserDeletedSender struct {
-	ch *amqp.Channel
-}
-
-func (uds *UserDeletedSender) Send(message []byte) error {
-	if err := uds.ch.Publish(
-		DeleteUserExchange,
-		UserDeletedQueue,
-		false,
-		false,
-		amqp.Publishing{
-			ContentType: "application/json",
-			Body:        message,
-		},
-	); err != nil {
-		return fmt.Errorf("failed to send message: %s", err)
 	}
 
 	return nil

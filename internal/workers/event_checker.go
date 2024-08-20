@@ -10,16 +10,16 @@ import (
 )
 
 type EventChecker struct {
-	amqpClient amqp_client.AmqpClient
-	eventRep   repository.EventStore
-	logger     *slog.Logger
+	sendersFactory amqp_client.AmqpSenderFactory
+	eventRep       repository.EventStore
+	logger         *slog.Logger
 }
 
-func NewEventChecker(amqpClient amqp_client.AmqpClient, eventRep repository.EventStore, logger *slog.Logger) *EventChecker {
+func NewEventChecker(sendersFactory amqp_client.AmqpSenderFactory, eventRep repository.EventStore, logger *slog.Logger) *EventChecker {
 	return &EventChecker{
-		amqpClient: amqpClient,
-		eventRep:   eventRep,
-		logger:     logger,
+		sendersFactory: sendersFactory,
+		eventRep:       eventRep,
+		logger:         logger,
 	}
 }
 
@@ -37,7 +37,7 @@ func (as EventChecker) Run() {
 			}
 
 			for _, event := range events {
-				sender, err := as.amqpClient.GetSender(event.EventType)
+				sender, err := as.sendersFactory.GetSender(event.EventType)
 				if err != nil {
 					log.Error("can`t get event sender: ", err)
 					time.Sleep(5 * time.Second)

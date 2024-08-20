@@ -3,7 +3,7 @@ package app
 import (
 	"github.com/KBcHMFollower/blog_user_service/config"
 	"github.com/KBcHMFollower/blog_user_service/database"
-	"github.com/KBcHMFollower/blog_user_service/internal/amqp_client"
+	"github.com/KBcHMFollower/blog_user_service/internal/amqp_client/rabbitmqclient"
 	grpcapp "github.com/KBcHMFollower/blog_user_service/internal/app/grpc_app"
 	"github.com/KBcHMFollower/blog_user_service/internal/cashe"
 	"github.com/KBcHMFollower/blog_user_service/internal/repository"
@@ -52,7 +52,7 @@ func New(
 	}
 	appLog.Info("Successfully created S3 client")
 
-	rabbitmqClient, err := amqp_client.NewRabbitMQClient(cfg.RabbitMq.Addr)
+	rabbitmqClient, err := rabbitmqclient.NewRabbitMQClient(cfg.RabbitMq.Addr)
 	if err != nil {
 		log.Error("can`t create RabbitMQ client", err)
 		panic(err)
@@ -72,7 +72,7 @@ func New(
 
 	authService := auth_service.New(log, cfg.JWT.TokenTTL, cfg.JWT.TokenSecret, userRepository, s3Client)
 
-	amqpSender := workers.NewEventChecker(rabbitmqClient, eventRepository, log)
+	amqpSender := workers.NewEventChecker(rabbitmqClient.GetSendersProvider(), eventRepository, log)
 	amqpSender.Run()
 
 	grpcApp := grpcapp.New(log, cfg.GRpc.Port, authService)

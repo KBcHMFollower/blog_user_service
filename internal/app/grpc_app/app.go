@@ -2,7 +2,7 @@ package grpcapp
 
 import (
 	"fmt"
-	grpcservers "github.com/KBcHMFollower/blog_user_service/internal/grpc"
+	grpcservers2 "github.com/KBcHMFollower/blog_user_service/internal/handlers/grpc"
 	auth_service "github.com/KBcHMFollower/blog_user_service/internal/services"
 	"google.golang.org/grpc/peer"
 	"log/slog"
@@ -23,8 +23,8 @@ func New(
 	userService *auth_service.UserService,
 ) *App {
 	gRpcServer := grpc.NewServer(grpc.StreamInterceptor(logStreamInterceptor))
-	grpcservers.RegisterAuthServer(gRpcServer, userService)
-	grpcservers.RegisterUserServer(gRpcServer, userService)
+	grpcservers2.RegisterAuthServer(gRpcServer, userService)
+	grpcservers2.RegisterUserServer(gRpcServer, userService)
 
 	return &App{
 		log:        log,
