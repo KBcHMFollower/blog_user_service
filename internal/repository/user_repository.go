@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/KBcHMFollower/blog_user_service/internal/cashe"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/cashe"
+	transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	"time"
 
 	"github.com/KBcHMFollower/blog_user_service/database"
@@ -15,42 +16,34 @@ import (
 )
 
 const (
-	USERS_TABLE_NAME       = "users"
-	SUBSCRIBERS_TABLE_NAME = "subscribers"
-	TE_TABLE_NAME          = "transaction_events"
-
-	USERS_CASHE_PREFIX = "userId-"
+	UsersTable             = "users"
+	SubscribersTable       = "subscribers"
+	TransactionEventsTable = "transaction_events"
+	UsersCachePref         = "userId-"
 )
-
-type CreateUserDto struct {
-	Email    string
-	HashPass []byte
-	FName    string
-	LName    string
-}
 
 type UserRepository struct {
 	db    database.DBWrapper
-	cashe cashe.CasheStorage
+	cache cashe.CasheStorage
 }
 
-func NewUserRepository(dbDriver database.DBWrapper, casheStorage cashe.CasheStorage) (*UserRepository, error) {
-	return &UserRepository{db: dbDriver, cashe: casheStorage}, nil
+func NewUserRepository(dbDriver database.DBWrapper, cacheStorage cashe.CasheStorage) (*UserRepository, error) {
+	return &UserRepository{db: dbDriver, cache: cacheStorage}, nil
 }
 
-func (r *UserRepository) getSubInfo(ctx context.Context, userId uuid.UUID, page uint64, size uint64, targetType string) ([]*models.Subscriber, uint32, error) {
+func (r *UserRepository) getSubInfo(ctx context.Context, getInfo transfer.GetSubscriptionInfo) ([]*models.Subscriber, uint32, error) {
 	op := "UserRepository.getSubInfo"
 
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	subscribers := make([]*models.Subscriber, 0)
 
-	offset := (page - 1) * size
+	offset := (getInfo.Page - 1) * getInfo.Size
 
 	query := builder.
 		Select("*").
-		From(SUBSCRIBERS_TABLE_NAME).
-		Where(squirrel.Eq{targetType: userId}).
-		Limit(size).
+		From(SubscribersTable).
+		Where(squirrel.Eq{getInfo.TargetType: getInfo.UserId}).
+		Limit(getInfo.Size).
 		Offset(offset)
 
 	sql, args, err := query.ToSql()
@@ -77,8 +70,8 @@ func (r *UserRepository) getSubInfo(ctx context.Context, userId uuid.UUID, page 
 
 	query = builder.
 		Select("COUNT(*)").
-		From(SUBSCRIBERS_TABLE_NAME).
-		Where(squirrel.Eq{targetType: userId})
+		From(SubscribersTable).
+		Where(squirrel.Eq{getInfo.TargetType: getInfo.UserId})
 
 	sql, args, err = query.ToSql()
 	if err != nil {
@@ -95,14 +88,14 @@ func (r *UserRepository) getSubInfo(ctx context.Context, userId uuid.UUID, page 
 	return subscribers, totalCount, nil
 }
 
-func (r *UserRepository) CreateUser(ctx context.Context, createDto *CreateUserDto) (uuid.UUID, error) {
+func (r *UserRepository) CreateUser(ctx context.Context, createDto *transfer.CreateUserInfo) (uuid.UUID, error) {
 	op := "UserRepository.CreateUser"
 
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	user := models.NewUserModel(createDto.Email, createDto.FName, createDto.LName, createDto.HashPass)
 
-	query := builder.Insert(USERS_TABLE_NAME).
+	query := builder.Insert(UsersTable).
 		SetMap(map[string]interface{}{
 			"id":         user.Id,
 			"email":      user.Email,
@@ -136,7 +129,7 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	sql, args, err := builder.Select("*").
-		From(USERS_TABLE_NAME).
+		From(UsersTable).
 		Where(squirrel.Eq{"email": email}).
 		ToSql()
 	if err != nil {
@@ -158,14 +151,14 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 func (r *UserRepository) GetUserById(ctx context.Context, userId uuid.UUID) (*models.User, error) {
 	op := "UserRepository.GetUserById"
 
-	if user, err := r.tryGetUserFromCashe(ctx, userId); err == nil {
+	if user, err := r.tryGetUserFromCache(ctx, userId); err == nil {
 		return user, nil
 	}
 
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	sql, args, err := builder.Select("*").
-		From(USERS_TABLE_NAME).
+		From(UsersTable).
 		Where(squirrel.Eq{"id": userId}).
 		ToSql()
 	if err != nil {
@@ -181,20 +174,25 @@ func (r *UserRepository) GetUserById(ctx context.Context, userId uuid.UUID) (*mo
 		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
-	if err := r.SetUserToCashe(ctx, &user); err != nil {
+	if err := r.SetUserToCache(ctx, &user); err != nil {
 		return &user, err
 	}
 
 	return &user, nil
 }
 
-func (r *UserRepository) GetUserSubscribers(ctx context.Context, userId uuid.UUID, page uint64, size uint64) ([]*models.User, uint32, error) {
+func (r *UserRepository) GetUserSubscribers(ctx context.Context, getInfo transfer.GetUserSubscribersInfo) ([]*models.User, uint32, error) {
 	op := "UserRepository.GetUserSubscribers"
 
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	users := make([]*models.User, 0)
 
-	subscribers, totalCount, err := r.getSubInfo(ctx, userId, page, size, "blogger_id")
+	subscribers, totalCount, err := r.getSubInfo(ctx, transfer.GetSubscriptionInfo{
+		UserId:     getInfo.UserId,
+		Page:       getInfo.Page,
+		Size:       getInfo.Size,
+		TargetType: "blogger_id",
+	})
 	if err != nil {
 		return users, totalCount, fmt.Errorf("%s : %w", op, err)
 	}
@@ -205,7 +203,7 @@ func (r *UserRepository) GetUserSubscribers(ctx context.Context, userId uuid.UUI
 	}
 
 	sql, args, err := builder.Select("*").
-		From(USERS_TABLE_NAME).
+		From(UsersTable).
 		Where(squirrel.Eq{"id": subscribersId}).
 		ToSql()
 	if err != nil {
@@ -230,13 +228,18 @@ func (r *UserRepository) GetUserSubscribers(ctx context.Context, userId uuid.UUI
 	return users, totalCount, nil
 }
 
-func (r *UserRepository) GetUserSubscriptions(ctx context.Context, userId uuid.UUID, page uint64, size uint64) ([]*models.User, uint32, error) {
+func (r *UserRepository) GetUserSubscriptions(ctx context.Context, getInfo transfer.GetUserSubscriptionsInfo) ([]*models.User, uint32, error) {
 	op := "UserRepository.GetUserSubscribers"
 
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	users := make([]*models.User, 0)
 
-	subscribers, totalCount, err := r.getSubInfo(ctx, userId, page, size, "subscriber_id")
+	subscribers, totalCount, err := r.getSubInfo(ctx, transfer.GetSubscriptionInfo{
+		UserId:     getInfo.UserId,
+		Page:       getInfo.Page,
+		Size:       getInfo.Size,
+		TargetType: "subscriber_id",
+	})
 	if err != nil {
 		return users, totalCount, fmt.Errorf("%s : %w", op, err)
 	}
@@ -247,7 +250,7 @@ func (r *UserRepository) GetUserSubscriptions(ctx context.Context, userId uuid.U
 	}
 
 	sql, args, err := builder.Select("*").
-		From(USERS_TABLE_NAME).
+		From(UsersTable).
 		Where(squirrel.Eq{"id": subscribersId}).
 		ToSql()
 
@@ -269,12 +272,12 @@ func (r *UserRepository) GetUserSubscriptions(ctx context.Context, userId uuid.U
 	return users, totalCount, nil
 }
 
-func (r *UserRepository) UpdateUser(ctx context.Context, updateData UpdateData) (*models.User, error) {
+func (r *UserRepository) UpdateUser(ctx context.Context, updateData transfer.UpdateUserInfo) (*models.User, error) {
 	op := "UserRepository.UpdateUser"
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	query := builder.
-		Update(USERS_TABLE_NAME).
+		Update(UsersTable).
 		Where(squirrel.Eq{"id": updateData.Id}).
 		Set("updated_date", time.Now())
 
@@ -297,7 +300,7 @@ func (r *UserRepository) UpdateUser(ctx context.Context, updateData UpdateData) 
 
 	queryGetPost := builder.
 		Select("*").
-		From(USERS_TABLE_NAME).
+		From(UsersTable).
 		Where(squirrel.Eq{"id": updateData.Id})
 	sqlGetPost, argsGetPost, _ := queryGetPost.ToSql()
 
@@ -309,20 +312,20 @@ func (r *UserRepository) UpdateUser(ctx context.Context, updateData UpdateData) 
 		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
-	if err := r.DeleteUserFromCashe(ctx, updateData.Id); err != nil {
+	if err := r.DeleteUserFromCache(ctx, updateData.Id); err != nil {
 		return &user, nil
 	}
 
 	return &user, nil
 }
 
-func (r *UserRepository) Subscribe(ctx context.Context, bloggerId uuid.UUID, subscriberId uuid.UUID) error {
+func (r *UserRepository) Subscribe(ctx context.Context, subInfo transfer.SubscribeToUserInfo) error {
 	op := "UserRepository.Subscribe"
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
-	subscribers := models.NewSubscriber(bloggerId, subscriberId)
+	subscribers := models.NewSubscriber(subInfo.BloggerId, subInfo.SubscriberId)
 
-	query := builder.Insert(SUBSCRIBERS_TABLE_NAME).
+	query := builder.Insert(SubscribersTable).
 		Columns("id", "blogger_id", "subscriber_id").
 		Values(subscribers.GetPointersArray()...)
 
@@ -339,12 +342,12 @@ func (r *UserRepository) Subscribe(ctx context.Context, bloggerId uuid.UUID, sub
 	return nil
 }
 
-func (r *UserRepository) Unsubscribe(ctx context.Context, bloggerId uuid.UUID, subscriberId uuid.UUID) error {
+func (r *UserRepository) Unsubscribe(ctx context.Context, unsubInfo transfer.UnsubscribeInfo) error {
 	op := "UserRepository.Unsubscribe"
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
-	query := builder.Delete(SUBSCRIBERS_TABLE_NAME).
-		Where(squirrel.Eq{"blogger_id": bloggerId, "subscriber_id": subscriberId})
+	query := builder.Delete(SubscribersTable).
+		Where(squirrel.Eq{"blogger_id": unsubInfo.BloggerId, "subscriber_id": unsubInfo.SubscriberId})
 
 	sql, args, err := query.ToSql()
 	if err != nil {
@@ -359,10 +362,10 @@ func (r *UserRepository) Unsubscribe(ctx context.Context, bloggerId uuid.UUID, s
 	return nil
 }
 
-func (r *UserRepository) DeleteUser(ctx context.Context, userId uuid.UUID) error {
+func (r *UserRepository) DeleteUser(ctx context.Context, delInfo transfer.DeleteUserInfo) error {
 	op := "UserRepository.DeleteUser"
 
-	user, err := r.GetUserById(ctx, userId)
+	user, err := r.GetUserById(ctx, delInfo.Id)
 	if err != nil {
 		return fmt.Errorf("%s : %w", op, err)
 	}
@@ -381,7 +384,7 @@ func (r *UserRepository) DeleteUser(ctx context.Context, userId uuid.UUID) error
 		}
 	}()
 
-	query := builder.Delete(USERS_TABLE_NAME).Where(squirrel.Eq{"id": userId})
+	query := builder.Delete(UsersTable).Where(squirrel.Eq{"id": delInfo.Id})
 	sql, args, err := query.ToSql()
 
 	if _, err := tx.ExecContext(ctx, sql, args...); err != nil {
@@ -394,7 +397,7 @@ func (r *UserRepository) DeleteUser(ctx context.Context, userId uuid.UUID) error
 	}
 
 	insertBuilder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	insertQuery := insertBuilder.Insert(TE_TABLE_NAME).
+	insertQuery := insertBuilder.Insert(TransactionEventsTable).
 		SetMap(map[string]interface{}{
 			"event_id":   uuid.New(),
 			"event_type": "userDeleted",
@@ -418,10 +421,10 @@ func (r *UserRepository) DeleteUser(ctx context.Context, userId uuid.UUID) error
 	return nil
 }
 
-func (r *UserRepository) tryGetUserFromCashe(ctx context.Context, id uuid.UUID) (*models.User, error) {
-	op := "UserRepository.tryGetUserFromCashe"
+func (r *UserRepository) tryGetUserFromCache(ctx context.Context, id uuid.UUID) (*models.User, error) {
+	op := "UserRepository.tryGetUserFromCache"
 
-	data, err := r.cashe.Get(ctx, fmt.Sprintf("%s%s", USERS_CASHE_PREFIX, id.String()))
+	data, err := r.cache.Get(ctx, fmt.Sprintf("%s%s", UsersCachePref, id.String()))
 	if err != nil {
 		return nil, fmt.Errorf("%s : %w", op, err)
 	}
@@ -435,15 +438,15 @@ func (r *UserRepository) tryGetUserFromCashe(ctx context.Context, id uuid.UUID) 
 	return user, nil
 }
 
-func (r *UserRepository) SetUserToCashe(ctx context.Context, user *models.User) error {
-	op := "UserRepository.SetUserToCashe"
+func (r *UserRepository) SetUserToCache(ctx context.Context, user *models.User) error {
+	op := "UserRepository.SetUserToCache"
 
 	userJson, err := json.Marshal(user)
 	if err != nil {
 		return fmt.Errorf("%s : %w", op, err)
 	}
 
-	err = r.cashe.Set(ctx, fmt.Sprintf("%s%s", USERS_CASHE_PREFIX, user.Id.String()), userJson)
+	err = r.cache.Set(ctx, fmt.Sprintf("%s%s", UsersCachePref, user.Id.String()), userJson)
 	if err != nil {
 		return fmt.Errorf("%s : %w", op, err)
 	}
@@ -451,10 +454,10 @@ func (r *UserRepository) SetUserToCashe(ctx context.Context, user *models.User) 
 	return nil
 }
 
-func (r *UserRepository) DeleteUserFromCashe(ctx context.Context, id uuid.UUID) error {
-	op := "UserRepository.DeleteUserFromCashe"
+func (r *UserRepository) DeleteUserFromCache(ctx context.Context, id uuid.UUID) error {
+	op := "UserRepository.DeleteUserFromCache"
 
-	err := r.cashe.Delete(ctx, fmt.Sprintf("%s%s", USERS_CASHE_PREFIX, id.String()))
+	err := r.cache.Delete(ctx, fmt.Sprintf("%s%s", UsersCachePref, id.String()))
 	if err != nil {
 		return fmt.Errorf("%s : %w", op, err)
 	}

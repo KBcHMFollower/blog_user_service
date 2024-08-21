@@ -1,22 +1,22 @@
 package amqp_app
 
 import (
-	"github.com/KBcHMFollower/blog_user_service/internal/amqp_client"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqp"
 )
 
 type AmqpApp struct {
-	client   amqp_client.AmqpClient
-	handlers map[string]amqp_client.AmqpHandlerFunc
+	client   amqp.AmqpClient
+	handlers map[string]amqp.AmqpHandlerFunc
 }
 
-func NewAmqpApp(client amqp_client.AmqpClient) *AmqpApp {
+func NewAmqpApp(client amqp.AmqpClient) *AmqpApp {
 	return &AmqpApp{
 		client:   client,
-		handlers: make(map[string]amqp_client.AmqpHandlerFunc),
+		handlers: make(map[string]amqp.AmqpHandlerFunc),
 	}
 }
 
-func (app *AmqpApp) RegisterHandler(name string, handler amqp_client.AmqpHandlerFunc) {
+func (app *AmqpApp) RegisterHandler(name string, handler amqp.AmqpHandlerFunc) {
 	app.handlers[name] = handler
 }
 
@@ -30,3 +30,5 @@ func (app *AmqpApp) Start() error {
 
 	return nil
 }
+
+//TODO: STOP

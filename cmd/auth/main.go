@@ -19,7 +19,7 @@ func main() {
 	app := app.New(log, cfg)
 	log.Info("сервер запускается!")
 
-	go app.GRpcServer.Run()
+	go app.Run()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
@@ -28,5 +28,5 @@ func main() {
 
 	log.Info("stopping app ", slog.String("signal", sign.String()))
 
-	app.GRpcServer.Stop()
+	app.Stop()
 }

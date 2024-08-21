@@ -2,24 +2,29 @@ package workers
 
 import (
 	"context"
-	"github.com/KBcHMFollower/blog_user_service/internal/amqp_client"
-	"github.com/KBcHMFollower/blog_user_service/internal/repository"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqp"
+	dep "github.com/KBcHMFollower/blog_user_service/internal/workers/interfaces/dep"
 	"github.com/google/uuid"
 	"log/slog"
 	"time"
 )
 
-type EventChecker struct {
-	sendersFactory amqp_client.AmqpSenderFactory
-	eventRep       repository.EventStore
-	logger         *slog.Logger
+type EventStore interface {
+	dep.EventGetter
+	dep.EventUpdater
 }
 
-func NewEventChecker(sendersFactory amqp_client.AmqpSenderFactory, eventRep repository.EventStore, logger *slog.Logger) *EventChecker {
+type EventChecker struct {
+	amqpClient amqp.AmqpClient
+	eventRep   EventStore
+	logger     *slog.Logger
+}
+
+func NewEventChecker(amqpClient amqp.AmqpClient, eventRep EventStore, logger *slog.Logger) *EventChecker {
 	return &EventChecker{
-		sendersFactory: sendersFactory,
-		eventRep:       eventRep,
-		logger:         logger,
+		amqpClient: amqpClient,
+		eventRep:   eventRep,
+		logger:     logger,
 	}
 }
 
@@ -37,14 +42,8 @@ func (as EventChecker) Run() {
 			}
 
 			for _, event := range events {
-				sender, err := as.sendersFactory.GetSender(event.EventType)
-				if err != nil {
-					log.Error("can`t get event sender: ", err)
-					time.Sleep(5 * time.Second)
-					continue
-				}
 
-				err = sender.Send([]byte(event.Payload))
+				err = as.amqpClient.Publish(event.EventType, []byte(event.Payload))
 				if err != nil {
 					log.Error("can`t publish event: ", err)
 					time.Sleep(5 * time.Second)

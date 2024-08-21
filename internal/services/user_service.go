@@ -2,13 +2,14 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	ssov1 "github.com/KBcHMFollower/blog_user_service/api/protos/gen/auth"
-	usersv1 "github.com/KBcHMFollower/blog_user_service/api/protos/gen/users"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/s3"
+	repositories_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
+	transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
 	"github.com/KBcHMFollower/blog_user_service/internal/lib/tokens"
+	dep "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces/dep"
 
-	"github.com/KBcHMFollower/blog_user_service/internal/repository"
-	s3client "github.com/KBcHMFollower/blog_user_service/internal/s3"
 	"log/slog"
 	"time"
 
@@ -17,25 +18,44 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type EventStore interface {
+	dep.EventGetter
+}
+
+type ImageStore interface {
+	dep.ImageGetter
+	dep.ImageUploader
+}
+
+type UserStore interface {
+	dep.UserDeleter
+	dep.UserGetter
+	dep.UserUpdater
+	dep.SubscribeManager
+	dep.UserCreator
+}
+
 type UserService struct {
 	log         *slog.Logger
 	tokenTtl    time.Duration
 	tokenSecret string
-	userRep     repository.UserStore
-	imgStore    s3client.ImageStore
+	userRep     UserStore
+	eventsRep   EventStore
+	imgStore    ImageStore
 }
 
-func New(log *slog.Logger, tokenTtl time.Duration, tokenSecret string, userRep repository.UserStore, imgStore s3client.ImageStore) *UserService {
+func NewUserService(log *slog.Logger, tokenTtl time.Duration, tokenSecret string, userRep UserStore, eventsRep EventStore, imgStore ImageStore) *UserService {
 	return &UserService{
 		log:         log,
 		tokenTtl:    tokenTtl,
 		tokenSecret: tokenSecret,
 		userRep:     userRep,
 		imgStore:    imgStore,
+		eventsRep:   eventsRep,
 	}
 }
 
-func (a *UserService) RegisterUser(ctx context.Context, req *ssov1.RegisterDTO) (string, error) {
+func (a *UserService) RegisterUser(ctx context.Context, req *transfer.RegisterInfo) (*transfer.TokenResult, error) {
 
 	op := "authService/registerUser"
 
@@ -44,63 +64,67 @@ func (a *UserService) RegisterUser(ctx context.Context, req *ssov1.RegisterDTO) 
 		slog.String("email", req.Email),
 	)
 
-	hashPass, err := bcrypt.GenerateFromPassword([]byte(req.GetPassword()), bcrypt.DefaultCost)
+	hashPass, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Error("can`t generate hashPass: ", err)
-		return "", fmt.Errorf("%s : %w", op, err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
-	userId, err := a.userRep.CreateUser(ctx, &repository.CreateUserDto{
-		Email:    req.GetEmail(),
-		FName:    req.GetFname(),
-		LName:    req.GetLname(),
+	userId, err := a.userRep.CreateUser(ctx, &repositories_transfer.CreateUserInfo{
+		Email:    req.Email,
+		FName:    req.FName,
+		LName:    req.LName,
 		HashPass: hashPass,
 	})
 	if err != nil {
 		log.Error("can`t create user in db: ", err)
-		return "", fmt.Errorf("%s : %w", op, err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
-	token, err := tokens_helper.CreateNewJwt(userId, req.GetEmail(), a.tokenTtl, a.tokenSecret)
+	token, err := tokens_helper.CreateNewJwt(userId, req.Email, a.tokenTtl, a.tokenSecret)
 	if err != nil {
 		log.Error("can`t create jwt: ", err)
-		return "", fmt.Errorf("%s : %w", op, err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
-	return token, nil
+	return &transfer.TokenResult{
+		AccessToken: token,
+	}, nil
 }
 
-func (a *UserService) LoginUser(ctx context.Context, email string, password string) (string, error) {
+func (a *UserService) LoginUser(ctx context.Context, loginInfo *transfer.LoginInfo) (*transfer.TokenResult, error) {
 
 	op := "authService/loginUser"
 
 	log := a.log.With(
 		slog.String("op", op),
-		slog.String("email", email),
+		slog.String("email", loginInfo.Email),
 	)
 
-	user, err := a.userRep.GetUserByEmail(ctx, email)
+	user, err := a.userRep.GetUserByEmail(ctx, loginInfo.Email)
 	if err != nil {
 		log.Error("can`t get user from db: ", err)
-		return "", fmt.Errorf("%s : %w", op, err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
-	err = bcrypt.CompareHashAndPassword(user.PassHash, []byte(password))
+	err = bcrypt.CompareHashAndPassword(user.PassHash, []byte(loginInfo.Password))
 	if err != nil {
 		log.Error("passwords not eq: ", err)
-		return "", fmt.Errorf("%s : %w", op, err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	token, err := tokens_helper.CreateNewJwt(user.Id, user.Email, a.tokenTtl, a.tokenSecret)
 	if err != nil {
 		log.Error("can`t generate jwt: ", err)
-		return "", fmt.Errorf("%s : %w", op, err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
-	return token, nil
+	return &transfer.TokenResult{
+		AccessToken: token,
+	}, nil
 }
 
-func (a *UserService) CheckAuth(ctx context.Context, token string) (string, error) {
+func (a *UserService) CheckAuth(ctx context.Context, authInfo *transfer.CheckAuthInfo) (*transfer.TokenResult, error) {
 
 	op := "authService/checkAuth"
 
@@ -108,122 +132,100 @@ func (a *UserService) CheckAuth(ctx context.Context, token string) (string, erro
 		slog.String("op", op),
 	)
 
-	parsedToken, err := tokens_helper.Parse(token, a.tokenSecret)
+	parsedToken, err := tokens_helper.Parse(authInfo.AccessToken, a.tokenSecret)
 	if err != nil {
 		log.Error("can`t parse token: ", err)
-		return "", fmt.Errorf("%s : %w", op, err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 	if !parsedToken.Valid {
 		log.Error("token is invalid: ", err)
-		return "", fmt.Errorf("%s : %w", op, err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	tokenClaims, err := tokens_helper.GetClaimsValues(parsedToken)
 	if err != nil {
 		log.Error("can`t  parse jwt claims: ", err)
-		return "", fmt.Errorf("%s : %w", op, err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	newToken, err := tokens_helper.CreateNewJwt(tokenClaims.Id, tokenClaims.Email, a.tokenTtl, a.tokenSecret)
 	if err != nil {
 		log.Error("can`t create jwt: ", err)
-		return "", fmt.Errorf("%s : %w", op, err)
+		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
-	return newToken, nil
+	return &transfer.TokenResult{
+		AccessToken: newToken,
+	}, nil
 }
 
-func (a *UserService) GetUserById(ctx context.Context, dto *usersv1.GetUserDTO) (*usersv1.GetUserRDO, error) {
+func (a *UserService) GetUserById(ctx context.Context, userId uuid.UUID) (*transfer.GetUserResult, error) {
 	op := "UserService/GetUserById"
 
 	log := a.log.With(
 		slog.String("op", op),
 	)
 
-	userUUID, err := uuid.Parse(dto.GetId())
-	if err != nil {
-		log.Error("can`t parse user uuid: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
-	}
-
-	user, err := a.userRep.GetUserById(ctx, userUUID)
+	user, err := a.userRep.GetUserById(ctx, userId)
 	if err != nil {
 		log.Error("can`t get user from db: ", err)
 		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
-	return &usersv1.GetUserRDO{
-		User: user.ConvertToProto(),
+	return &transfer.GetUserResult{
+		User: transfer.GetUserResultFromModel(user),
 	}, nil
 }
 
-func (a *UserService) GetSubscribers(ctx context.Context, dto *usersv1.GetSubscribersDTO) (*usersv1.GetSubscribersRDO, error) {
+func (a *UserService) GetSubscribers(ctx context.Context, getInfo *transfer.GetSubscribersInfo) (*transfer.GetSubscribersResult, error) {
 	op := "UserService/GetSubscribers"
 	log := a.log.With(
 		slog.String("op", op))
 
-	bloggerUUID, err := uuid.Parse(dto.GetBloggerId())
-	if err != nil {
-		log.Error("can`t parse blogger uuid: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
-	}
-
-	users, totalCount, err := a.userRep.GetUserSubscribers(ctx, bloggerUUID, uint64(dto.GetPage()), uint64(dto.GetSize()))
+	users, totalCount, err := a.userRep.GetUserSubscribers(ctx, getInfo.BloggerId, uint64(getInfo.Page), uint64(getInfo.Size))
 	if err != nil {
 		log.Error("can`t get user subscribers from db: ", err)
 		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
-	return &usersv1.GetSubscribersRDO{
-		Subscribers: models.UsersArrayToProto(users),
+	return &transfer.GetSubscribersResult{
+		Subscribers: transfer.GetSubscribersArrayResultFromModel(users),
 		TotalCount:  int32(totalCount),
 	}, nil
 }
 
-func (a *UserService) GetSubscriptions(ctx context.Context, dto *usersv1.GetSubscriptionsDTO) (*usersv1.GetSubscriptionsRDO, error) {
+func (a *UserService) GetSubscriptions(ctx context.Context, getInfo *transfer.GetSubscriptionsInfo) (*transfer.GetSubscriptionsResult, error) {
 	op := "UserService/GetSubscriptions"
 	log := a.log.With(
 		slog.String("op", op))
 
-	subscriberUUID, err := uuid.Parse(dto.GetSubscriberId())
-	if err != nil {
-		log.Error("can`t parse subscriber uuid: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
-	}
-
-	users, totalCount, err := a.userRep.GetUserSubscriptions(ctx, subscriberUUID, uint64(dto.GetPage()), uint64(dto.GetSize()))
+	users, totalCount, err := a.userRep.GetUserSubscriptions(ctx, getInfo.SubscriberId, uint64(getInfo.Page), uint64(getInfo.Size))
 	if err != nil {
 		log.Error("can`t get user bloggers from db: ", err)
 		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
-	return &usersv1.GetSubscriptionsRDO{
-		Subscriptions: models.UsersArrayToProto(users),
+	return &transfer.GetSubscriptionsResult{
+		Subscriptions: transfer.GetSubscribersArrayResultFromModel(users),
 		TotalCount:    int32(totalCount),
 	}, nil
 }
 
-func (a *UserService) UpdateUser(ctx context.Context, dto *usersv1.UpdateUserDTO) (*usersv1.UpdateUserRDO, error) {
+func (a *UserService) UpdateUser(ctx context.Context, updateInfo *transfer.UpdateUserInfo) (*transfer.UpdateUserResult, error) {
 	op := "UserService/UpdateUser"
 	log := a.log.With(
 		slog.String("op", op))
 
-	userUUID, err := uuid.Parse(dto.GetId())
-	if err != nil {
-		log.Error("can`t parse user uuid: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
-	}
-
-	var updateItems = make([]*repository.UpdateInfo, 0)
-	for _, item := range dto.GetUpdateData() {
-		updateItems = append(updateItems, &repository.UpdateInfo{
-			Name:  item.GetName(),
-			Value: item.GetValue(),
+	var updateItems = make([]*repositories_transfer.UserFieldInfo, 0)
+	for _, fieldInfo := range updateInfo.UpdateFields {
+		updateItems = append(updateItems, &repositories_transfer.UserFieldInfo{
+			Name:  fieldInfo.Name,
+			Value: fieldInfo.Value,
 		})
 	}
 
-	user, err := a.userRep.UpdateUser(ctx, repository.UpdateData{
-		Id:         userUUID,
+	user, err := a.userRep.UpdateUser(ctx, repositories_transfer.UpdateUserInfo{
+		Id:         updateInfo.Id,
 		UpdateInfo: updateItems,
 	})
 	if err != nil {
@@ -231,126 +233,68 @@ func (a *UserService) UpdateUser(ctx context.Context, dto *usersv1.UpdateUserDTO
 		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
-	return &usersv1.UpdateUserRDO{
-		User: user.ConvertToProto(),
+	return &transfer.UpdateUserResult{
+		User: transfer.GetUserResultFromModel(user),
 	}, nil
 }
 
-func (a *UserService) Subscribe(ctx context.Context, dto *usersv1.SubscribeDTO) (*usersv1.SubscribeRDO, error) {
+func (a *UserService) Subscribe(ctx context.Context, subInfo *transfer.SubscribeInfo) error {
 	op := "UserService/Subscribe"
 	log := a.log.With(
 		slog.String("op", op))
 
-	bloggerUUID, err := uuid.Parse(dto.GetBloggerId())
-	if err != nil {
-		log.Error("can`t parse blogger uuid: ", err)
-		return &usersv1.SubscribeRDO{
-			IsSubscribe: false,
-		}, fmt.Errorf("%s : %w", op, err)
-	}
-
-	subscriberUUID, err := uuid.Parse(dto.GetSubscriberId())
-	if err != nil {
-		log.Error("can`t parse subscriber uuid: ", err)
-		return &usersv1.SubscribeRDO{
-			IsSubscribe: false,
-		}, fmt.Errorf("%s : %w", op, err)
-	}
-
-	err = a.userRep.Subscribe(ctx, bloggerUUID, subscriberUUID)
+	err := a.userRep.Subscribe(ctx, subInfo.BloggerId, subInfo.SubscriberId)
 	if err != nil {
 		log.Error("can`t subscribe to user in db: ", err)
-		return &usersv1.SubscribeRDO{
-			IsSubscribe: false,
-		}, fmt.Errorf("%s : %w", op, err)
+		return fmt.Errorf("%s : %w", op, err)
 	}
 
-	return &usersv1.SubscribeRDO{
-		IsSubscribe: true,
-	}, nil
+	return nil
 }
 
-func (a *UserService) Unsubscribe(ctx context.Context, dto *usersv1.SubscribeDTO) (*usersv1.SubscribeRDO, error) {
+func (a *UserService) Unsubscribe(ctx context.Context, subInfo *transfer.SubscribeInfo) error {
 	op := "UserService/Subscribe"
 	log := a.log.With(
 		slog.String("op", op))
 
-	bloggerUUID, err := uuid.Parse(dto.GetBloggerId())
-	if err != nil {
-		log.Error("can`t parse blogger uuid: ", err)
-		return &usersv1.SubscribeRDO{
-			IsSubscribe: false,
-		}, fmt.Errorf("%s : %w", op, err)
-	}
-
-	subscriberUUID, err := uuid.Parse(dto.GetSubscriberId())
-	if err != nil {
-		log.Error("can`t parse subscriber uuid: ", err)
-		return &usersv1.SubscribeRDO{
-			IsSubscribe: false,
-		}, fmt.Errorf("%s : %w", op, err)
-	}
-
-	err = a.userRep.Unsubscribe(ctx, bloggerUUID, subscriberUUID)
+	err := a.userRep.Unsubscribe(ctx, subInfo.BloggerId, subInfo.SubscriberId)
 	if err != nil {
 		log.Error("can`t unsubscribe in db: ", err)
-		return &usersv1.SubscribeRDO{
-			IsSubscribe: false,
-		}, fmt.Errorf("%s : %w", op, err)
+		return fmt.Errorf("%s : %w", op, err)
 	}
 
-	return &usersv1.SubscribeRDO{
-		IsSubscribe: true,
-	}, nil
+	return nil
 }
 
-func (a *UserService) DeleteUser(ctx context.Context, dto *usersv1.DeleteUserDTO) (*usersv1.DeleteUserRDO, error) {
+func (a *UserService) DeleteUser(ctx context.Context, deleteInfo *transfer.DeleteUserInfo) error {
 	op := "UserService/DeleteUser"
 	log := a.log.With(
 		slog.String("op", op))
 
-	userUUID, err := uuid.Parse(dto.GetId())
-	if err != nil {
-		log.Error("can`t parse user uuid: ", err)
-		return &usersv1.DeleteUserRDO{
-			IsDeleted: false,
-		}, fmt.Errorf("%s : %w", op, err)
-	}
-
-	err = a.userRep.DeleteUser(ctx, userUUID)
+	err := a.userRep.DeleteUser(ctx, deleteInfo.Id)
 	if err != nil {
 		log.Error("can`t delete user in db: ", err)
-		return &usersv1.DeleteUserRDO{
-			IsDeleted: false,
-		}, fmt.Errorf("%s : %w", op, err)
+		return fmt.Errorf("%s : %w", op, err)
 	}
 
-	return &usersv1.DeleteUserRDO{
-		IsDeleted: true,
-	}, nil
+	return nil
 }
 
-func (a *UserService) UploadAvatar(ctx context.Context, dto *usersv1.UploadAvatarDTO) (*usersv1.UploadAvatarRDO, error) {
+func (a *UserService) UploadAvatar(ctx context.Context, uploadInfo *transfer.UploadAvatarInfo) (*transfer.AvatarResult, error) {
 	op := "UserService/UploadAvatar"
 	log := a.log.With(
 		slog.String("op", op))
 
-	userUUID, err := uuid.Parse(dto.GetUserId())
-	if err != nil {
-		log.Error("can`t parse user uuid: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
-	}
-
-	imgUrl, err := a.imgStore.UploadFile(ctx, fmt.Sprintf("%s.jpeg", uuid.New().String()), dto.GetImage(), s3client.ImageJpeg)
+	imgUrl, err := a.imgStore.UploadFile(ctx, fmt.Sprintf("%s.jpeg", uuid.New().String()), uploadInfo.Image, s3client.ImageJpeg)
 	if err != nil {
 		log.Error("can`t upload image: ", err)
 		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
 	//TODO
-	_, err = a.userRep.UpdateUser(ctx, repository.UpdateData{
-		Id: userUUID,
-		UpdateInfo: []*repository.UpdateInfo{
+	_, err = a.userRep.UpdateUser(ctx, repositories_transfer.UpdateUserInfo{
+		Id: uploadInfo.UserId,
+		UpdateInfo: []*repositories_transfer.UserFieldInfo{
 			{
 				Name:  "avatar",
 				Value: imgUrl,
@@ -366,9 +310,40 @@ func (a *UserService) UploadAvatar(ctx context.Context, dto *usersv1.UploadAvata
 		return nil, fmt.Errorf("%s : %w", op, err)
 	}
 
-	return &usersv1.UploadAvatarRDO{
-		UserId:        dto.GetUserId(),
-		AvatarUrl:     imgUrl,
-		AvatarMiniUrl: imgUrl,
+	return &transfer.AvatarResult{
+		UserId:     uploadInfo.UserId,
+		Avatar:     imgUrl,
+		AvatarMini: imgUrl,
 	}, nil
+}
+
+func (a *UserService) CompensateDeletedUser(ctx context.Context, eventId uuid.UUID) error {
+	op := "UserService/CompensateDeletedUser"
+	log := a.log.With(
+		slog.String("op", op))
+
+	eventInfo, err := a.eventsRep.GetEventById(ctx, eventId)
+	if err != nil {
+		log.Error("can`t get event info: ", err)
+		return fmt.Errorf("%s : %w", op, err)
+	}
+
+	var user models.User
+	if err := json.Unmarshal([]byte(eventInfo.Payload), &user); err != nil {
+		log.Error("can`t unmarshal event: ", err)
+		return fmt.Errorf("%s : %w", op, err)
+	}
+
+	_, err = a.userRep.CreateUser(ctx, &repositories_transfer.CreateUserInfo{
+		Email:    user.Email,
+		FName:    user.FName,
+		LName:    user.LName,
+		HashPass: user.PassHash,
+	}) //TODO : Create new metod from user compensate
+	if err != nil {
+		log.Error("can`t create user in db: ", err)
+		return fmt.Errorf("%s : %w", op, err)
+	}
+
+	return nil
 }

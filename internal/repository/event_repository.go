@@ -80,3 +80,32 @@ func (r *EventRepository) SetSentStatusesInEvents(ctx context.Context, eventsId 
 
 	return nil
 }
+
+func (r *EventRepository) GetEventById(ctx context.Context, eventId uuid.UUID) (*models.EventInfo, error) {
+	op := "UserRepository.getEventById"
+
+	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+
+	query := builder.
+		Select("*").
+		From("transaction_events").
+		Where(squirrel.Eq{"event_id": eventId})
+
+	sql, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("%s : %w", op, err)
+	}
+
+	row, err := r.db.QueryContext(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s : %w", op, err)
+	}
+	defer row.Close()
+
+	var eventInfo models.EventInfo
+	if err := row.Scan(eventInfo.GetPointersArray()...); err != nil {
+		return nil, fmt.Errorf("%s : %w", op, err)
+	}
+
+	return &eventInfo, nil
+}
