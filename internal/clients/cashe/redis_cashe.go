@@ -28,6 +28,10 @@ func NewRedisCache(addr string, password string, db int, ttl time.Duration) (*Re
 	}, nil
 }
 
+func (rc *RedisCache) Stop() error {
+	return rc.client.Close()
+}
+
 func (rc *RedisCache) Set(ctx context.Context, key string, value interface{}) error {
 	return rc.client.Set(ctx, key, value, rc.ttl).Err()
 }

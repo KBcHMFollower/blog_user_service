@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/cashe"
+	"github.com/KBcHMFollower/blog_user_service/internal/database"
 	transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	"time"
 
-	"github.com/KBcHMFollower/blog_user_service/database"
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"

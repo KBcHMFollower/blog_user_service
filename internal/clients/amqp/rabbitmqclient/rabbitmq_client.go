@@ -53,7 +53,7 @@ func NewRabbitMQClient(addr string) (*RabbitMQClient, error) {
 	return &RabbitMQClient{pubConn: cConn, consConn: cConn, pubCh: pCh, consCh: cCh, sendersFactory: sendersFactory}, nil
 }
 
-func (rc *RabbitMQClient) Close() error {
+func (rc *RabbitMQClient) Stop() error {
 	if err := rc.pubCh.Close(); err != nil {
 		return fmt.Errorf("failed to close RabbitMQ channel: %s", err)
 	}

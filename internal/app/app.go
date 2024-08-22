@@ -1,14 +1,14 @@
 package app
 
 import (
-	"github.com/KBcHMFollower/blog_user_service/config"
-	"github.com/KBcHMFollower/blog_user_service/database"
+	"fmt"
 	"github.com/KBcHMFollower/blog_user_service/internal/app/amqp_app"
 	grpcapp "github.com/KBcHMFollower/blog_user_service/internal/app/grpc_app"
-	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqp/rabbitmqclient"
-	"github.com/KBcHMFollower/blog_user_service/internal/clients/cashe"
-	"github.com/KBcHMFollower/blog_user_service/internal/clients/s3"
+	"github.com/KBcHMFollower/blog_user_service/internal/app/store_app"
+	"github.com/KBcHMFollower/blog_user_service/internal/app/workers_app"
+	"github.com/KBcHMFollower/blog_user_service/internal/config"
 	amqp_handlers "github.com/KBcHMFollower/blog_user_service/internal/handlers/amqp"
+	"github.com/KBcHMFollower/blog_user_service/internal/lib"
 	"github.com/KBcHMFollower/blog_user_service/internal/repository"
 	auth_service "github.com/KBcHMFollower/blog_user_service/internal/services"
 	"github.com/KBcHMFollower/blog_user_service/internal/workers"
@@ -16,8 +16,10 @@ import (
 )
 
 type App struct {
-	gRpcApp *grpcapp.App
-	amqpApp *amqp_app.AmqpApp
+	gRpcApp    *grpcapp.App
+	amqpApp    *amqp_app.AmqpApp
+	storeApp   *store_app.StoreApp
+	workersApp *workers_app.WorkersApp
 }
 
 func New(
@@ -28,58 +30,61 @@ func New(
 	//appLog := log.With(
 	//	slog.String("op", op))
 
-	driver, db, err := database.New(cfg.Storage.ConnectionString)
-	ContinueOrPanic(err)
-	err = database.ForceMigrate(db, cfg.Storage.MigrationPath)
-	ContinueOrPanic(err)
+	storageApp, err := store_app.New(cfg.Storage, cfg.Redis, cfg.Minio)
+	lib.ContinueOrPanic(err)
+	rabbitMqApp, err := amqp_app.NewAmqpApp(cfg.RabbitMq)
+	lib.ContinueOrPanic(err)
 
-	cacheStorage, err := cashe.NewRedisCache(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB, cfg.Redis.CacheTTL)
-	ContinueOrPanic(err)
+	eventRepository, err := repository.NewEventRepository(storageApp.PostgresStore.Store)
+	lib.ContinueOrPanic(err)
+	userRepository, err := repository.NewUserRepository(storageApp.PostgresStore.Store, storageApp.RedisStore)
+	lib.ContinueOrPanic(err)
 
-	s3Client, err := s3client.New(cfg.Minio.Endpoint, cfg.Minio.AccessKey, cfg.Minio.SecretKey, cfg.Minio.Bucket)
-	ContinueOrPanic(err)
-
-	eventRepository, err := repository.NewEventRepository(driver)
-	ContinueOrPanic(err)
-	userRepository, err := repository.NewUserRepository(driver, cacheStorage)
-	ContinueOrPanic(err)
-
-	authService := auth_service.NewUserService(log, cfg.JWT.TokenTTL, cfg.JWT.TokenSecret, userRepository, eventRepository, s3Client)
+	authService := auth_service.NewUserService(log, cfg.JWT.TokenTTL, cfg.JWT.TokenSecret, userRepository, eventRepository, storageApp.S3Client)
 
 	amqpUsersHandler := amqp_handlers.NewUserHandler(authService)
 
-	rabbitmqClient, err := rabbitmqclient.NewRabbitMQClient(cfg.RabbitMq.Addr)
-	ContinueOrPanic(err)
-	rabbitMqApp := amqp_app.NewAmqpApp(rabbitmqClient)
 	rabbitMqApp.RegisterHandler("posts-deleted", amqpUsersHandler.HandlePostDeletingEvent)
 
-	amqpSender := workers.NewEventChecker(rabbitmqClient, eventRepository, log)
-	amqpSender.Run()
-
+	workersApp := workers_app.New()
 	grpcApp := grpcapp.New(log, cfg.GRpc.Port, authService)
 
+	workersApp.AddWorker(workers.NewEventChecker(rabbitMqApp.Client, eventRepository, log))
+
 	return &App{
-		gRpcApp: grpcApp,
-		amqpApp: rabbitMqApp,
+		gRpcApp:    grpcApp,
+		amqpApp:    rabbitMqApp,
+		storeApp:   storageApp,
+		workersApp: workersApp,
 	}
 }
 
 func (a *App) Run() {
-	err := a.gRpcApp.Run()
-	ContinueOrPanic(err)
+	err := a.storeApp.Run()
+	lib.ContinueOrPanic(err)
+
+	err = a.gRpcApp.Run()
+	lib.ContinueOrPanic(err)
 
 	err = a.amqpApp.Start()
-	ContinueOrPanic(err)
+	lib.ContinueOrPanic(err)
+
+	err = a.workersApp.Run()
+	lib.ContinueOrPanic(err)
 }
 
 func (a *App) Stop() error {
 	a.gRpcApp.Stop()
-	//a.amqpApp.Stop()
-	return nil
-} //TODO
 
-func ContinueOrPanic(err error) {
-	if err != nil {
-		panic(err)
+	if err := a.storeApp.Stop(); err != nil {
+		return fmt.Errorf("error in store stopping proccess: %w", err)
 	}
-}
+
+	if err := a.amqpApp.Stop(); err != nil {
+		return fmt.Errorf("error in amqp stopping proccess: %w", err)
+	}
+
+	a.workersApp.Stop()
+
+	return nil
+} //TODO: ФУНКЦИЯ НЕ ДОЛЖНА ЗАВЕРШАТЬСЯ ПОСЛЕ ПЕРВОЙ ОШИБКИ

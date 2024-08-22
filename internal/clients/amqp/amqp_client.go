@@ -13,4 +13,5 @@ type AmqpHandlerFunc = func(message []byte) error
 type AmqpClient interface {
 	Publish(eventType string, body []byte) error
 	Consume(target string, handler AmqpHandlerFunc) error
+	Stop() error
 }
