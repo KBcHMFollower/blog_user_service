@@ -4,17 +4,17 @@ import (
 	"context"
 	usersv1 "github.com/KBcHMFollower/blog_user_service/api/protos/gen/users"
 	services_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
-	"github.com/KBcHMFollower/blog_user_service/internal/services"
+	services_interfaces "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 )
 
 type GRPCUsers struct {
 	usersv1.UnimplementedUsersServiceServer
-	userService *services.UserService
+	userService services_interfaces.UserService
 }
 
-func RegisterUserServer(gRPC *grpc.Server, userService *services.UserService) {
+func RegisterUserServer(gRPC *grpc.Server, userService services_interfaces.UserService) {
 	usersv1.RegisterUsersServiceServer(gRPC, &GRPCUsers{userService: userService})
 }
 

@@ -12,6 +12,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// TODO: КАКАЯ-ТО ХУЙНЯ
 type Migrator struct {
 	driver database.Driver
 }

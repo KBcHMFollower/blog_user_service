@@ -182,7 +182,10 @@ func (a *UserService) GetSubscribers(ctx context.Context, getInfo *transfer.GetS
 	log := a.log.With(
 		slog.String("op", op))
 
-	users, totalCount, err := a.userRep.GetUserSubscribers(ctx, getInfo.BloggerId, uint64(getInfo.Page), uint64(getInfo.Size))
+	users, totalCount, err := a.userRep.GetUserSubscribers(ctx, repositories_transfer.GetUserSubscribersInfo{
+		UserId: getInfo.BloggerId,
+		Page:   uint64(getInfo.Page),
+		Size:   uint64(getInfo.Size)})
 	if err != nil {
 		log.Error("can`t get user subscribers from db: ", err)
 		return nil, fmt.Errorf("%s : %w", op, err)
@@ -199,7 +202,11 @@ func (a *UserService) GetSubscriptions(ctx context.Context, getInfo *transfer.Ge
 	log := a.log.With(
 		slog.String("op", op))
 
-	users, totalCount, err := a.userRep.GetUserSubscriptions(ctx, getInfo.SubscriberId, uint64(getInfo.Page), uint64(getInfo.Size))
+	users, totalCount, err := a.userRep.GetUserSubscriptions(ctx, repositories_transfer.GetUserSubscriptionsInfo{
+		UserId: getInfo.SubscriberId,
+		Page:   uint64(getInfo.Page),
+		Size:   uint64(getInfo.Size),
+	})
 	if err != nil {
 		log.Error("can`t get user bloggers from db: ", err)
 		return nil, fmt.Errorf("%s : %w", op, err)
@@ -243,7 +250,10 @@ func (a *UserService) Subscribe(ctx context.Context, subInfo *transfer.Subscribe
 	log := a.log.With(
 		slog.String("op", op))
 
-	err := a.userRep.Subscribe(ctx, subInfo.BloggerId, subInfo.SubscriberId)
+	err := a.userRep.Subscribe(ctx, repositories_transfer.SubscribeToUserInfo{
+		BloggerId:    subInfo.BloggerId,
+		SubscriberId: subInfo.SubscriberId,
+	})
 	if err != nil {
 		log.Error("can`t subscribe to user in db: ", err)
 		return fmt.Errorf("%s : %w", op, err)
@@ -257,7 +267,10 @@ func (a *UserService) Unsubscribe(ctx context.Context, subInfo *transfer.Subscri
 	log := a.log.With(
 		slog.String("op", op))
 
-	err := a.userRep.Unsubscribe(ctx, subInfo.BloggerId, subInfo.SubscriberId)
+	err := a.userRep.Unsubscribe(ctx, repositories_transfer.UnsubscribeInfo{
+		BloggerId:    subInfo.BloggerId,
+		SubscriberId: subInfo.SubscriberId,
+	})
 	if err != nil {
 		log.Error("can`t unsubscribe in db: ", err)
 		return fmt.Errorf("%s : %w", op, err)
@@ -271,7 +284,9 @@ func (a *UserService) DeleteUser(ctx context.Context, deleteInfo *transfer.Delet
 	log := a.log.With(
 		slog.String("op", op))
 
-	err := a.userRep.DeleteUser(ctx, deleteInfo.Id)
+	err := a.userRep.DeleteUser(ctx, repositories_transfer.DeleteUserInfo{
+		Id: deleteInfo.Id,
+	})
 	if err != nil {
 		log.Error("can`t delete user in db: ", err)
 		return fmt.Errorf("%s : %w", op, err)

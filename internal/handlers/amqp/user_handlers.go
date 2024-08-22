@@ -5,14 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqp/messages"
-	"github.com/KBcHMFollower/blog_user_service/internal/services"
+	services_interfaces "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces"
 )
 
 type UserHandler struct {
-	userService *services.UserService
+	userService services_interfaces.UserService
 }
 
-func NewUserHandler(usrService *services.UserService) *UserHandler {
+func NewUserHandler(usrService services_interfaces.UserService) *UserHandler {
 	return &UserHandler{
 		userService: usrService,
 	}
