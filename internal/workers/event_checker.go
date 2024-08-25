@@ -2,7 +2,7 @@ package workers
 
 import (
 	"context"
-	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqp"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient"
 	dep "github.com/KBcHMFollower/blog_user_service/internal/workers/interfaces/dep"
 	"github.com/google/uuid"
 	"log/slog"
@@ -15,12 +15,13 @@ type EventStore interface {
 }
 
 type EventChecker struct {
-	amqpClient amqp.AmqpClient
+	amqpClient amqpclient.AmqpClient
 	eventRep   EventStore
+	txCreator  dep.TransactionCreator
 	logger     *slog.Logger
 }
 
-func NewEventChecker(amqpClient amqp.AmqpClient, eventRep EventStore, logger *slog.Logger) *EventChecker {
+func NewEventChecker(amqpClient amqpclient.AmqpClient, eventRep EventStore, logger *slog.Logger) *EventChecker {
 	return &EventChecker{
 		amqpClient: amqpClient,
 		eventRep:   eventRep,
@@ -60,7 +61,7 @@ func (as EventChecker) Run(ctx context.Context) error {
 					eventIds = append(eventIds, event.EventId)
 				}
 
-				err = as.eventRep.SetSentStatusesInEvents(ctx, eventIds)
+				err = as.eventRep.SetSentStatusesInEvents(ctx, eventIds) //TODO: ЕСЛИ ВЫДАЕТСЯ ОШИБКА ВСЕ РАВНО СТАВИТ SENT
 				if err != nil {
 					log.Error("can`t set status in events: ", err)
 					time.Sleep(5 * time.Second)

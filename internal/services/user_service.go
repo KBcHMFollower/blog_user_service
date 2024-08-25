@@ -4,21 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient/messages"
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/s3"
+	"github.com/KBcHMFollower/blog_user_service/internal/domain"
 	repositories_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
 	"github.com/KBcHMFollower/blog_user_service/internal/lib/tokens"
 	dep "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces/dep"
+	services_utils "github.com/KBcHMFollower/blog_user_service/internal/services/lib"
 
 	"log/slog"
 	"time"
 
-	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type EventStore interface {
+	dep.EventCreator
 	dep.EventGetter
 }
 
@@ -41,20 +45,23 @@ type UserService struct {
 	tokenSecret string
 	userRep     UserStore
 	eventsRep   EventStore
+	txCreator   dep.TransactionCreator
 	imgStore    ImageStore
 }
 
-func NewUserService(log *slog.Logger, tokenTtl time.Duration, tokenSecret string, userRep UserStore, eventsRep EventStore, imgStore ImageStore) *UserService {
+func NewUserService(log *slog.Logger, tokenTtl time.Duration, tokenSecret string, txCreator dep.TransactionCreator, userRep UserStore, eventsRep EventStore, imgStore ImageStore) *UserService {
 	return &UserService{
 		log:         log,
 		tokenTtl:    tokenTtl,
 		tokenSecret: tokenSecret,
 		userRep:     userRep,
 		imgStore:    imgStore,
+		txCreator:   txCreator,
 		eventsRep:   eventsRep,
 	}
 }
 
+// fname и lname не работают
 func (a *UserService) RegisterUser(ctx context.Context, req *transfer.RegisterInfo) (*transfer.TokenResult, error) {
 
 	op := "authService/registerUser"
@@ -67,7 +74,7 @@ func (a *UserService) RegisterUser(ctx context.Context, req *transfer.RegisterIn
 	hashPass, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Error("can`t generate hashPass: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 
 	userId, err := a.userRep.CreateUser(ctx, &repositories_transfer.CreateUserInfo{
@@ -78,13 +85,13 @@ func (a *UserService) RegisterUser(ctx context.Context, req *transfer.RegisterIn
 	})
 	if err != nil {
 		log.Error("can`t create user in db: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 
 	token, err := tokens_helper.CreateNewJwt(userId, req.Email, a.tokenTtl, a.tokenSecret)
 	if err != nil {
 		log.Error("can`t create jwt: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 
 	return &transfer.TokenResult{
@@ -104,19 +111,19 @@ func (a *UserService) LoginUser(ctx context.Context, loginInfo *transfer.LoginIn
 	user, err := a.userRep.GetUserByEmail(ctx, loginInfo.Email)
 	if err != nil {
 		log.Error("can`t get user from db: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 
 	err = bcrypt.CompareHashAndPassword(user.PassHash, []byte(loginInfo.Password))
 	if err != nil {
 		log.Error("passwords not eq: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 
 	token, err := tokens_helper.CreateNewJwt(user.Id, user.Email, a.tokenTtl, a.tokenSecret)
 	if err != nil {
 		log.Error("can`t generate jwt: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 
 	return &transfer.TokenResult{
@@ -135,23 +142,23 @@ func (a *UserService) CheckAuth(ctx context.Context, authInfo *transfer.CheckAut
 	parsedToken, err := tokens_helper.Parse(authInfo.AccessToken, a.tokenSecret)
 	if err != nil {
 		log.Error("can`t parse token: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 	if !parsedToken.Valid {
 		log.Error("token is invalid: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 
 	tokenClaims, err := tokens_helper.GetClaimsValues(parsedToken)
 	if err != nil {
 		log.Error("can`t  parse jwt claims: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 
 	newToken, err := tokens_helper.CreateNewJwt(tokenClaims.Id, tokenClaims.Email, a.tokenTtl, a.tokenSecret)
 	if err != nil {
 		log.Error("can`t create jwt: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 
 	return &transfer.TokenResult{
@@ -159,17 +166,46 @@ func (a *UserService) CheckAuth(ctx context.Context, authInfo *transfer.CheckAut
 	}, nil
 }
 
-func (a *UserService) GetUserById(ctx context.Context, userId uuid.UUID) (*transfer.GetUserResult, error) {
+func (a *UserService) GetUserById(ctx context.Context, userId uuid.UUID) (ersUser *transfer.GetUserResult, resErr error) {
 	op := "UserService/GetUserById"
 
 	log := a.log.With(
 		slog.String("op", op),
 	)
 
-	user, err := a.userRep.GetUserById(ctx, userId)
+	tx, err := a.txCreator.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("can`t get user from db: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		log.Error("can`t begin tx: ", err)
+		return nil, domain.AddOpInErr(err, op)
+	}
+	defer func() {
+		resErr = services_utils.HandleErrInTransaction(resErr, tx)
+	}()
+
+	cacheUser, err := a.userRep.TryGetUserFromCache(ctx, userId)
+	if err != nil {
+		log.Error("can`t get cacheUser from cache: ", err)
+	}
+	if cacheUser != nil {
+		return &transfer.GetUserResult{
+			User: transfer.GetUserResultFromModel(cacheUser),
+		}, nil
+	}
+
+	user, err := a.userRep.GetUserById(ctx, userId, tx)
+	if err != nil {
+		log.Error("can`t get cacheUser from db: ", err)
+		return nil, domain.AddOpInErr(err, op)
+	}
+
+	if err := a.userRep.SetUserToCache(ctx, user); err != nil {
+		log.Error("can`t set cacheUser to db: ", err)
+		return nil, domain.AddOpInErr(err, op)
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Error("can`t commit tx: ", err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 
 	return &transfer.GetUserResult{
@@ -188,7 +224,7 @@ func (a *UserService) GetSubscribers(ctx context.Context, getInfo *transfer.GetS
 		Size:   uint64(getInfo.Size)})
 	if err != nil {
 		log.Error("can`t get user subscribers from db: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 
 	return &transfer.GetSubscribersResult{
@@ -209,7 +245,7 @@ func (a *UserService) GetSubscriptions(ctx context.Context, getInfo *transfer.Ge
 	})
 	if err != nil {
 		log.Error("can`t get user bloggers from db: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 
 	return &transfer.GetSubscriptionsResult{
@@ -218,10 +254,19 @@ func (a *UserService) GetSubscriptions(ctx context.Context, getInfo *transfer.Ge
 	}, nil
 }
 
-func (a *UserService) UpdateUser(ctx context.Context, updateInfo *transfer.UpdateUserInfo) (*transfer.UpdateUserResult, error) {
+func (a *UserService) UpdateUser(ctx context.Context, updateInfo *transfer.UpdateUserInfo) (resUser *transfer.UpdateUserResult, resErr error) {
 	op := "UserService/UpdateUser"
 	log := a.log.With(
 		slog.String("op", op))
+
+	tx, err := a.txCreator.BeginTx(ctx, nil)
+	if err != nil {
+		log.Error("can`t begin tx: ", err)
+		return nil, domain.AddOpInErr(err, op)
+	}
+	defer func() {
+		resErr = services_utils.HandleErrInTransaction(resErr, tx)
+	}()
 
 	var updateItems = make([]*repositories_transfer.UserFieldInfo, 0)
 	for _, fieldInfo := range updateInfo.UpdateFields {
@@ -231,17 +276,32 @@ func (a *UserService) UpdateUser(ctx context.Context, updateInfo *transfer.Updat
 		})
 	}
 
-	user, err := a.userRep.UpdateUser(ctx, repositories_transfer.UpdateUserInfo{
+	if err := a.userRep.UpdateUser(ctx, repositories_transfer.UpdateUserInfo{
 		Id:         updateInfo.Id,
 		UpdateInfo: updateItems,
-	})
-	if err != nil {
+	}, tx); err != nil {
 		log.Error("can`t update user in db: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, domain.AddOpInErr(err, op)
+	}
+
+	exUser, exErr := a.userRep.GetUserById(ctx, updateInfo.Id, tx)
+	if exErr != nil {
+		log.Error("can`t get user from db: ", err)
+		return nil, domain.AddOpInErr(err, op)
+	}
+
+	if err := a.userRep.DeleteUserFromCache(ctx, updateInfo.Id); err != nil {
+		log.Error("can`t update user in db: ", err)
+		return nil, domain.AddOpInErr(err, op)
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Error("can`t commit tx: ", err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 
 	return &transfer.UpdateUserResult{
-		User: transfer.GetUserResultFromModel(user),
+		User: transfer.GetUserResultFromModel(exUser),
 	}, nil
 }
 
@@ -256,7 +316,7 @@ func (a *UserService) Subscribe(ctx context.Context, subInfo *transfer.Subscribe
 	})
 	if err != nil {
 		log.Error("can`t subscribe to user in db: ", err)
-		return fmt.Errorf("%s : %w", op, err)
+		return domain.AddOpInErr(err, op)
 	}
 
 	return nil
@@ -273,41 +333,106 @@ func (a *UserService) Unsubscribe(ctx context.Context, subInfo *transfer.Subscri
 	})
 	if err != nil {
 		log.Error("can`t unsubscribe in db: ", err)
-		return fmt.Errorf("%s : %w", op, err)
+		return domain.AddOpInErr(err, op)
 	}
 
 	return nil
 }
 
-func (a *UserService) DeleteUser(ctx context.Context, deleteInfo *transfer.DeleteUserInfo) error {
+func (a *UserService) DeleteUser(ctx context.Context, deleteInfo *transfer.DeleteUserInfo) (resErr error) {
 	op := "UserService/DeleteUser"
 	log := a.log.With(
 		slog.String("op", op))
 
-	err := a.userRep.DeleteUser(ctx, repositories_transfer.DeleteUserInfo{
-		Id: deleteInfo.Id,
-	})
+	tx, err := a.txCreator.BeginTx(ctx, nil)
 	if err != nil {
+		log.Error("can`t begin transaction: ", resErr)
+		return fmt.Errorf("%s : %w", op, resErr)
+	}
+	defer func() {
+		resErr = services_utils.HandleErrInTransaction(resErr, tx)
+	}()
+
+	user, err := a.GetUserById(ctx, deleteInfo.Id)
+	if err != nil {
+		log.Error("can`t get user by id: ", resErr)
+		return domain.AddOpInErr(err, op)
+	}
+
+	if err := a.userRep.DeleteUser(ctx, repositories_transfer.DeleteUserInfo{
+		Id: deleteInfo.Id,
+	}, tx); err != nil {
 		log.Error("can`t delete user in db: ", err)
-		return fmt.Errorf("%s : %w", op, err)
+		return domain.AddOpInErr(err, op)
+	}
+
+	if err := a.userRep.DeleteUserFromCache(ctx, deleteInfo.Id); err != nil {
+		log.Error("can`t delete user from cache: ", err)
+		return domain.AddOpInErr(err, op)
+	}
+
+	eventId := uuid.New()
+
+	messageEntity := messages.UserDeletedMessage{ //TODO: ПЕРЕДЕЛАТЬ MESSAGE, ПОЛЬЗОВАТЕЛЬ ДОЛЖЕН БЫТЬ ОТДЕЛЬНО
+		IsDeleted:   false,
+		FName:       user.User.FName,
+		LName:       user.User.LName,
+		Email:       user.User.Email,
+		PassHash:    []byte("TODO"),
+		EventId:     eventId,
+		Id:          user.User.Id,
+		Avatar:      user.User.Avatar,
+		AvatarMin:   user.User.AvatarMini,
+		CreatedDate: time.Now(),
+		UpdatedDate: time.Now(),
+	}
+
+	messageJson, err := json.Marshal(messageEntity)
+	if err != nil {
+		log.Error("can`t marshal message: ", err)
+		return domain.AddOpInErr(err, op)
+	}
+
+	if err := a.eventsRep.Create(ctx, repositories_transfer.CreateEventInfo{
+		EventId:   eventId,
+		EventType: amqpclient.UserDeletedEventKey,
+		Payload:   messageJson,
+	}, tx); err != nil {
+		log.Error("can`t create event in db: ", err)
+		return domain.AddOpInErr(err, op)
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Error("can`t commit transaction: ", err)
+		return domain.AddOpInErr(err, op)
 	}
 
 	return nil
 }
 
-func (a *UserService) UploadAvatar(ctx context.Context, uploadInfo *transfer.UploadAvatarInfo) (*transfer.AvatarResult, error) {
+func (a *UserService) UploadAvatar(ctx context.Context, uploadInfo *transfer.UploadAvatarInfo) (resAvatar *transfer.AvatarResult, resErr error) {
 	op := "UserService/UploadAvatar"
+
 	log := a.log.With(
 		slog.String("op", op))
+
+	tx, err := a.txCreator.BeginTx(ctx, nil)
+	if err != nil {
+		log.Error("can`t begin tx: ", err)
+		return nil, domain.AddOpInErr(err, op)
+	}
+	defer func() {
+		resErr = services_utils.HandleErrInTransaction(resErr, tx)
+	}()
 
 	imgUrl, err := a.imgStore.UploadFile(ctx, fmt.Sprintf("%s.jpeg", uuid.New().String()), uploadInfo.Image, s3client.ImageJpeg)
 	if err != nil {
 		log.Error("can`t upload image: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 
 	//TODO
-	_, err = a.userRep.UpdateUser(ctx, repositories_transfer.UpdateUserInfo{
+	err = a.userRep.UpdateUser(ctx, repositories_transfer.UpdateUserInfo{
 		Id: uploadInfo.UserId,
 		UpdateInfo: []*repositories_transfer.UserFieldInfo{
 			{
@@ -319,10 +444,20 @@ func (a *UserService) UploadAvatar(ctx context.Context, uploadInfo *transfer.Upl
 				Value: imgUrl,
 			},
 		},
-	})
+	}, nil)
 	if err != nil {
 		log.Error("can`t update user in db: ", err)
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, domain.AddOpInErr(err, op)
+	}
+
+	if err := a.userRep.DeleteUserFromCache(ctx, uploadInfo.UserId); err != nil {
+		log.Error("can`t update user in db: ", err)
+		return nil, domain.AddOpInErr(err, op)
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Error("can`t commit tx: ", err)
+		return nil, domain.AddOpInErr(err, op)
 	}
 
 	return &transfer.AvatarResult{
@@ -332,7 +467,7 @@ func (a *UserService) UploadAvatar(ctx context.Context, uploadInfo *transfer.Upl
 	}, nil
 }
 
-func (a *UserService) CompensateDeletedUser(ctx context.Context, eventId uuid.UUID) error {
+func (a *UserService) CompensateDeletedUser(ctx context.Context, eventId uuid.UUID) error { //TODO: ПЕРЕПИСАТЬ
 	op := "UserService/CompensateDeletedUser"
 	log := a.log.With(
 		slog.String("op", op))
@@ -340,15 +475,15 @@ func (a *UserService) CompensateDeletedUser(ctx context.Context, eventId uuid.UU
 	eventInfo, err := a.eventsRep.GetEventById(ctx, eventId)
 	if err != nil {
 		log.Error("can`t get event info: ", err)
-		return fmt.Errorf("%s : %w", op, err)
+		return domain.AddOpInErr(err, op)
 	}
 
-	var user models.User
+	var user messages.UserDeletedMessage
 	if err := json.Unmarshal([]byte(eventInfo.Payload), &user); err != nil {
 		log.Error("can`t unmarshal event: ", err)
-		return fmt.Errorf("%s : %w", op, err)
+		return domain.AddOpInErr(err, op)
 	}
-
+	//TODO: ПЕРЕДЕЛАТЬ МЕССАГ
 	_, err = a.userRep.CreateUser(ctx, &repositories_transfer.CreateUserInfo{
 		Email:    user.Email,
 		FName:    user.FName,
@@ -357,7 +492,7 @@ func (a *UserService) CompensateDeletedUser(ctx context.Context, eventId uuid.UU
 	}) //TODO : Create new metod from user compensate
 	if err != nil {
 		log.Error("can`t create user in db: ", err)
-		return fmt.Errorf("%s : %w", op, err)
+		return domain.AddOpInErr(err, op)
 	}
 
 	return nil

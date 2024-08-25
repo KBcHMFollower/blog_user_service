@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqp/messages"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient/messages"
 	services_interfaces "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces"
 )
 
@@ -25,9 +25,9 @@ func (handler *UserHandler) HandlePostDeletingEvent(message []byte) error {
 		return fmt.Errorf("can`t unmarshal user message: %v", err)
 	}
 
-	if resInfo.Status != "OK" {
-		return fmt.Errorf("status not OK: %v", resInfo.Status)
-	}
+	if resInfo.Status == "OK" {
+		return nil
+	} //TODO: ЧЕТО НУЖНО ДЕЛАТЬ
 	if err := handler.userService.CompensateDeletedUser(context.TODO(), resInfo.EventId); err != nil {
 		return fmt.Errorf("can`t compensate user: %v", err)
 	}

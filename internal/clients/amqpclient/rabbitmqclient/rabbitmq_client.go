@@ -1,17 +1,17 @@
 package rabbitmqclient
 
 import (
+	"errors"
 	"fmt"
-	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqp"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient"
 	"github.com/streadway/amqp"
 	"log"
 )
 
 const (
 	DeleteUserExchange    = "direct-user-actions"
-	UserDeletedQueue      = "user-deleted"
-	UserPostsDeletedQueue = "user-posts-deleted"
-	UserCompensateQueue   = "user-compensate"
+	UserDeletedQueue      = amqpclient.UserDeletedEventKey
+	UserPostsDeletedQueue = amqpclient.PostsDeletedEventKey
 )
 
 type RabbitMQClient struct {
@@ -19,7 +19,7 @@ type RabbitMQClient struct {
 	pubCh          *amqp.Channel
 	consConn       *amqp.Connection
 	consCh         *amqp.Channel
-	sendersFactory amqp.AmqpSenderFactory
+	sendersFactory amqpclient.AmqpSenderFactory
 }
 
 func NewRabbitMQClient(addr string) (*RabbitMQClient, error) {
@@ -54,20 +54,22 @@ func NewRabbitMQClient(addr string) (*RabbitMQClient, error) {
 }
 
 func (rc *RabbitMQClient) Stop() error {
+	var resErr error = nil
+
 	if err := rc.pubCh.Close(); err != nil {
-		return fmt.Errorf("failed to close RabbitMQ channel: %s", err)
+		resErr = errors.Join(resErr, fmt.Errorf("failed to close RabbitMQ channel: %s", err))
 	}
 	if err := rc.pubConn.Close(); err != nil {
-		return fmt.Errorf("failed to close RabbitMQ connection: %s", err)
+		resErr = errors.Join(resErr, fmt.Errorf("failed to close RabbitMQ connection: %s", err))
 	}
 	if err := rc.consCh.Close(); err != nil {
-		return fmt.Errorf("failed to close RabbitMQ channel: %s", err)
+		resErr = errors.Join(resErr, fmt.Errorf("failed to close RabbitMQ channel: %s", err))
 	}
 	if err := rc.consConn.Close(); err != nil {
-		return fmt.Errorf("failed to close RabbitMQ connection: %s", err)
+		resErr = errors.Join(resErr, fmt.Errorf("failed to close RabbitMQ connection: %s", err))
 	}
 
-	return nil
+	return resErr
 }
 
 func (rc *RabbitMQClient) Publish(eventType string, body []byte) error {
@@ -83,7 +85,7 @@ func (rc *RabbitMQClient) Publish(eventType string, body []byte) error {
 	return nil
 }
 
-func (rc *RabbitMQClient) Consume(queueName string, handler amqp.AmqpHandlerFunc) error {
+func (rc *RabbitMQClient) Consume(queueName string, handler amqpclient.AmqpHandlerFunc) error {
 	del, err := rc.consCh.Consume(
 		queueName,
 		"",
@@ -169,28 +171,6 @@ func DeclareQueues(ch *amqp.Channel) error {
 	if err = ch.QueueBind(
 		q.Name,
 		UserPostsDeletedQueue,
-		DeleteUserExchange,
-		false,
-		nil,
-	); err != nil {
-		return fmt.Errorf("failed to bind UserDeleted queue: %s", err)
-	}
-
-	q, err = ch.QueueDeclare(
-		UserCompensateQueue,
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to declare UserDeleted queue: %s", err)
-	}
-
-	if err = ch.QueueBind(
-		q.Name,
-		UserCompensateQueue,
 		DeleteUserExchange,
 		false,
 		nil,

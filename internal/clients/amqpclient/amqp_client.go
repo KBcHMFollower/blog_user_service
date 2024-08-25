@@ -1,4 +1,9 @@
-package amqp
+package amqpclient
+
+const (
+	PostsDeletedEventKey = "posts-deleted-feedback"
+	UserDeletedEventKey  = "user-deleted"
+)
 
 type AmqpSender interface {
 	Send(message []byte) error

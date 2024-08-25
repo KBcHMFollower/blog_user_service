@@ -2,6 +2,7 @@ package store_app
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/cashe"
 	s3client "github.com/KBcHMFollower/blog_user_service/internal/clients/s3"
@@ -60,17 +61,19 @@ func (app *StoreApp) Run() error {
 }
 
 func (app *StoreApp) Stop() error {
+	var resErr error = nil
+
 	if err := app.PostgresStore.Store.Stop(); err != nil {
-		return fmt.Errorf("error in stop postgres store : %w", err)
+		resErr = errors.Join(resErr, fmt.Errorf("error in stop postgres store : %w", err))
 	}
 
 	if err := app.RedisStore.Stop(); err != nil {
-		return fmt.Errorf("error in stop redis store : %w", err)
+		resErr = errors.Join(resErr, fmt.Errorf("error in stop redis store : %w", err))
 	}
 
 	if err := app.S3Client.Stop(); err != nil {
-		return fmt.Errorf("error in stop s3 client : %w", err)
+		resErr = errors.Join(resErr, fmt.Errorf("error in stop s3 client : %w", err))
 	}
 
-	return nil
-} //TODO: ДОЛЖНО СОБИРАТЬ СТЕК ОШИБОК, А НЕ ЗАВЕРШАТЬСЯ, КОГДА СЛОВИЛА ОДНУ
+	return resErr
+}

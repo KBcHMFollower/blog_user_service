@@ -1,20 +1,9 @@
 package database
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
-
-	_ "github.com/lib/pq"
 )
-
-type DBWrapper interface {
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
-	Stop() error
-}
 
 type DBDriver struct {
 	*sql.DB

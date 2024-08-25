@@ -2,18 +2,18 @@ package rabbitmqclient
 
 import (
 	"fmt"
-	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqp"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient"
 	"github.com/streadway/amqp"
 )
 
 type SendersStore struct {
 	ch         *amqp.Channel
-	sendersMap map[string]amqp.AmqpSender
+	sendersMap map[string]amqpclient.AmqpSender
 }
 
 func NewSendersStore(ch *amqp.Channel) *SendersStore {
-	sendersMap := map[string]amqp.AmqpSender{
-		"userDeleted": &UserDeletedSender{ch: ch},
+	sendersMap := map[string]amqpclient.AmqpSender{
+		"user-deleted": &UserDeletedSender{ch: ch},
 	}
 
 	return &SendersStore{
@@ -22,7 +22,7 @@ func NewSendersStore(ch *amqp.Channel) *SendersStore {
 	}
 }
 
-func (ss *SendersStore) GetSender(senderName string) (amqp.AmqpSender, error) {
+func (ss *SendersStore) GetSender(senderName string) (amqpclient.AmqpSender, error) {
 	sender, ok := ss.sendersMap[senderName]
 	if !ok {
 		return nil, fmt.Errorf("sender not found for sender %s", senderName)

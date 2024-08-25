@@ -21,8 +21,10 @@ func New(
 	log *slog.Logger,
 	port int,
 	userService *auth_service.UserService,
+	interceptor grpc.ServerOption,
 ) *App {
-	gRpcServer := grpc.NewServer(grpc.StreamInterceptor(logStreamInterceptor))
+	gRpcServer := grpc.NewServer(
+		interceptor)
 	grpcservers2.RegisterAuthServer(gRpcServer, userService)
 	grpcservers2.RegisterUserServer(gRpcServer, userService)
 

@@ -2,11 +2,13 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/cashe"
 	"github.com/KBcHMFollower/blog_user_service/internal/database"
 	transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
+	rep_utils "github.com/KBcHMFollower/blog_user_service/internal/repository/lib"
 	"time"
 
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
@@ -27,8 +29,8 @@ type UserRepository struct {
 	cache cashe.CasheStorage
 }
 
-func NewUserRepository(dbDriver database.DBWrapper, cacheStorage cashe.CasheStorage) (*UserRepository, error) {
-	return &UserRepository{db: dbDriver, cache: cacheStorage}, nil
+func NewUserRepository(dbDriver database.DBWrapper, cacheStorage cashe.CasheStorage) *UserRepository {
+	return &UserRepository{db: dbDriver, cache: cacheStorage}
 }
 
 func (r *UserRepository) getSubInfo(ctx context.Context, getInfo transfer.GetSubscriptionInfo) ([]*models.Subscriber, uint32, error) {
@@ -46,14 +48,14 @@ func (r *UserRepository) getSubInfo(ctx context.Context, getInfo transfer.GetSub
 		Limit(getInfo.Size).
 		Offset(offset)
 
-	sql, args, err := query.ToSql()
+	toSql, args, err := query.ToSql()
 	if err != nil {
-		return subscribers, 0, fmt.Errorf("%s : %w", op, err)
+		return subscribers, 0, fmt.Errorf("%s : failed to build sql query : %w", op, err)
 	}
 
-	rows, err := r.db.QueryContext(ctx, sql, args...)
+	rows, err := r.db.QueryContext(ctx, toSql, args...)
 	if err != nil {
-		return subscribers, 0, fmt.Errorf("%s : %w", op, err)
+		return subscribers, 0, fmt.Errorf("%s : failed to execute sql : %w", op, err)
 	}
 	defer rows.Close()
 
@@ -62,7 +64,7 @@ func (r *UserRepository) getSubInfo(ctx context.Context, getInfo transfer.GetSub
 
 		err := rows.Scan(subscriber.GetPointersArray()...)
 		if err != nil {
-			return subscribers, 0, fmt.Errorf("error in parse post from db: %v", err)
+			return subscribers, 0, fmt.Errorf("%s : failed to scan row : %w", op, err)
 		}
 
 		subscribers = append(subscribers, &subscriber)
@@ -73,16 +75,16 @@ func (r *UserRepository) getSubInfo(ctx context.Context, getInfo transfer.GetSub
 		From(SubscribersTable).
 		Where(squirrel.Eq{getInfo.TargetType: getInfo.UserId})
 
-	sql, args, err = query.ToSql()
+	toSql, args, err = query.ToSql()
 	if err != nil {
-		return subscribers, 0, fmt.Errorf("%s : %w", op, err)
+		return subscribers, 0, fmt.Errorf("%s : failed to build sql query : %w", op, err)
 	}
 
 	var totalCount uint32
 
-	countRow := r.db.QueryRowContext(ctx, sql, args...)
+	countRow := r.db.QueryRowContext(ctx, toSql, args...)
 	if err := countRow.Scan(&totalCount); err != nil {
-		return nil, 0, fmt.Errorf("%s : %w", op, err)
+		return nil, 0, fmt.Errorf("%s : failed to scan row : %w", op, err)
 	}
 
 	return subscribers, totalCount, nil
@@ -109,7 +111,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, createDto *transfer.Cre
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("%s : %w", op, err)
+		return uuid.Nil, fmt.Errorf("%s : failed to build sql query : %w", op, err)
 	}
 
 	row := r.db.QueryRowContext(ctx, sql, args...)
@@ -118,7 +120,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, createDto *transfer.Cre
 
 	err = row.Scan(&id)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("%s : %w", op, err)
+		return uuid.Nil, fmt.Errorf("%s : failed to scan row : %w", op, err)
 	}
 
 	return id, nil
@@ -133,7 +135,7 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 		Where(squirrel.Eq{"email": email}).
 		ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, fmt.Errorf("%s : failed to build sql query : %w", op, err)
 	}
 
 	var user models.User
@@ -142,40 +144,33 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 
 	err = row.Scan(user.GetPointersArray()...)
 	if err != nil {
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, fmt.Errorf("%s : failed to scan row : %w", op, err)
 	}
 
 	return &user, nil
 }
 
-func (r *UserRepository) GetUserById(ctx context.Context, userId uuid.UUID) (*models.User, error) {
+func (r *UserRepository) GetUserById(ctx context.Context, userId uuid.UUID, tx *sql.Tx) (*models.User, error) {
 	op := "UserRepository.GetUserById"
 
-	if user, err := r.tryGetUserFromCache(ctx, userId); err == nil {
-		return user, nil
-	}
-
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	executor := rep_utils.GetExecutor(r.db, tx)
 
 	sql, args, err := builder.Select("*").
 		From(UsersTable).
 		Where(squirrel.Eq{"id": userId}).
 		ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, fmt.Errorf("%s : failed to build sql query : %w", op, err)
 	}
 
 	var user models.User
 
-	row := r.db.QueryRowContext(ctx, sql, args...)
+	row := executor.QueryRowContext(ctx, sql, args...)
 
 	err = row.Scan(user.GetPointersArray()...)
 	if err != nil {
-		return nil, fmt.Errorf("%s : %w", op, err)
-	}
-
-	if err := r.SetUserToCache(ctx, &user); err != nil {
-		return &user, err
+		return nil, fmt.Errorf("%s : failed to scan row : %w", op, err)
 	}
 
 	return &user, nil
@@ -207,12 +202,12 @@ func (r *UserRepository) GetUserSubscribers(ctx context.Context, getInfo transfe
 		Where(squirrel.Eq{"id": subscribersId}).
 		ToSql()
 	if err != nil {
-		return users, totalCount, fmt.Errorf("%s : %w", op, err)
+		return users, totalCount, fmt.Errorf("%s : failed to build sql query : %w", op, err)
 	}
 
 	rows, err := r.db.QueryContext(ctx, sql, args...)
 	if err != nil {
-		return users, 0, fmt.Errorf("%s : %w", op, err)
+		return users, 0, fmt.Errorf("%s : failed to execute sql : %w", op, err)
 	}
 	defer rows.Close()
 
@@ -220,7 +215,7 @@ func (r *UserRepository) GetUserSubscribers(ctx context.Context, getInfo transfe
 		var user models.User
 		err = rows.Scan(user.GetPointersArray()...)
 		if err != nil {
-			return users, 0, fmt.Errorf("%s : %w", op, err)
+			return users, 0, fmt.Errorf("%s : failed to scan row : %w", op, err)
 		}
 		users = append(users, &user)
 	}
@@ -241,7 +236,7 @@ func (r *UserRepository) GetUserSubscriptions(ctx context.Context, getInfo trans
 		TargetType: "subscriber_id",
 	})
 	if err != nil {
-		return users, totalCount, fmt.Errorf("%s : %w", op, err)
+		return users, totalCount, fmt.Errorf("%s : failed to get sub info : %w", op, err)
 	}
 
 	subscribersId := make([]uuid.UUID, 0)
@@ -256,7 +251,7 @@ func (r *UserRepository) GetUserSubscriptions(ctx context.Context, getInfo trans
 
 	rows, err := r.db.QueryContext(ctx, sql, args...)
 	if err != nil {
-		return users, 0, fmt.Errorf("%s : %w", op, err)
+		return users, 0, fmt.Errorf("%s : failed to execute sql : %w", op, err)
 	}
 	defer rows.Close()
 
@@ -264,7 +259,7 @@ func (r *UserRepository) GetUserSubscriptions(ctx context.Context, getInfo trans
 		var user models.User
 		err = rows.Scan(user.GetPointersArray()...)
 		if err != nil {
-			return users, 0, fmt.Errorf("%s : %w", op, err)
+			return users, 0, fmt.Errorf("%s : failed to scan row : %w", op, err)
 		}
 		users = append(users, &user)
 	}
@@ -272,9 +267,10 @@ func (r *UserRepository) GetUserSubscriptions(ctx context.Context, getInfo trans
 	return users, totalCount, nil
 }
 
-func (r *UserRepository) UpdateUser(ctx context.Context, updateData transfer.UpdateUserInfo) (*models.User, error) {
+func (r *UserRepository) UpdateUser(ctx context.Context, updateData transfer.UpdateUserInfo, tx *sql.Tx) error { //TODO
 	op := "UserRepository.UpdateUser"
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	executor := rep_utils.GetExecutor(r.db, tx)
 
 	query := builder.
 		Update(UsersTable).
@@ -290,33 +286,15 @@ func (r *UserRepository) UpdateUser(ctx context.Context, updateData transfer.Upd
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return fmt.Errorf("%s : failed to build sql query : %w", op, err)
 	}
 
-	_, err = r.db.ExecContext(ctx, sql, args...)
+	_, err = executor.ExecContext(ctx, sql, args...)
 	if err != nil {
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return fmt.Errorf("%s : failed to execute sql : %w", op, err)
 	}
 
-	queryGetPost := builder.
-		Select("*").
-		From(UsersTable).
-		Where(squirrel.Eq{"id": updateData.Id})
-	sqlGetPost, argsGetPost, _ := queryGetPost.ToSql()
-
-	row := r.db.QueryRowContext(ctx, sqlGetPost, argsGetPost...)
-
-	var user models.User
-	err = row.Scan(user.GetPointersArray()...)
-	if err != nil {
-		return nil, fmt.Errorf("%s : %w", op, err)
-	}
-
-	if err := r.DeleteUserFromCache(ctx, updateData.Id); err != nil {
-		return &user, nil
-	}
-
-	return &user, nil
+	return nil
 }
 
 func (r *UserRepository) Subscribe(ctx context.Context, subInfo transfer.SubscribeToUserInfo) error {
@@ -331,12 +309,12 @@ func (r *UserRepository) Subscribe(ctx context.Context, subInfo transfer.Subscri
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("%s : %w", op, err)
+		return fmt.Errorf("%s : failed to build sql query : %w", op, err)
 	}
 
 	_, err = r.db.ExecContext(ctx, sql, args...)
 	if err != nil {
-		return fmt.Errorf("%s : %w", op, err)
+		return fmt.Errorf("%s : failed to execute sql : %w", op, err)
 	}
 
 	return nil
@@ -351,88 +329,49 @@ func (r *UserRepository) Unsubscribe(ctx context.Context, unsubInfo transfer.Uns
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("%s : %w", op, err)
+		return fmt.Errorf("%s : failed to build sql query : %w", op, err)
 	}
 
 	_, err = r.db.ExecContext(ctx, sql, args...)
 	if err != nil {
-		return fmt.Errorf("%s : %w", op, err)
+		return fmt.Errorf("%s : failed to execute sql : %w", op, err)
 	}
 
 	return nil
 }
 
-func (r *UserRepository) DeleteUser(ctx context.Context, delInfo transfer.DeleteUserInfo) error {
+func (r *UserRepository) DeleteUser(ctx context.Context, delInfo transfer.DeleteUserInfo, tx *sql.Tx) error {
 	op := "UserRepository.DeleteUser"
 
-	user, err := r.GetUserById(ctx, delInfo.Id)
-	if err != nil {
-		return fmt.Errorf("%s : %w", op, err)
-	}
-
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("%s : %w", op, err)
-	}
-	defer func() { //TODO
-		if err != nil {
-			if txErr := tx.Rollback(); txErr != nil {
-				err = fmt.Errorf("%s : %w", op, txErr)
-			}
-		}
-	}()
+	executor := rep_utils.GetExecutor(r.db, tx)
 
 	query := builder.Delete(UsersTable).Where(squirrel.Eq{"id": delInfo.Id})
 	sql, args, err := query.ToSql()
-
-	if _, err := tx.ExecContext(ctx, sql, args...); err != nil {
-		return fmt.Errorf("%s : %w", op, err)
-	}
-
-	eventPayload, err := json.Marshal(user)
 	if err != nil {
-		return fmt.Errorf("%s : %w", op, err)
+		return fmt.Errorf("%s : failed to build sql query : %w", op, err)
 	}
 
-	insertBuilder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	insertQuery := insertBuilder.Insert(TransactionEventsTable).
-		SetMap(map[string]interface{}{
-			"event_id":   uuid.New(),
-			"event_type": "userDeleted",
-			"payload":    string(eventPayload),
-		})
-
-	sql, args, err = insertQuery.ToSql()
-	if err != nil {
-		return fmt.Errorf("%s : %w", op, err)
-	}
-
-	_, err = tx.ExecContext(ctx, sql, args...)
-	if err != nil {
-		return fmt.Errorf("%s : %w", op, err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("%s : %w", op, err)
+	if _, err := executor.ExecContext(ctx, sql, args...); err != nil {
+		return fmt.Errorf("%s : failed to execute sql : %w", op, err)
 	}
 
 	return nil
 }
 
-func (r *UserRepository) tryGetUserFromCache(ctx context.Context, id uuid.UUID) (*models.User, error) {
-	op := "UserRepository.tryGetUserFromCache"
+// TODO: ДОЛЖНО ВЫЗЫВАТЬСЯ ИЗ СЕРВИСА
+func (r *UserRepository) TryGetUserFromCache(ctx context.Context, id uuid.UUID) (*models.User, error) {
+	op := "UserRepository.TryGetUserFromCache"
 
 	data, err := r.cache.Get(ctx, fmt.Sprintf("%s%s", UsersCachePref, id.String()))
 	if err != nil {
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, fmt.Errorf("%s : failed to read from cache : %w", op, err)
 	}
 
 	var user *models.User
 
 	if err := json.Unmarshal([]byte(data), &user); err != nil {
-		return nil, fmt.Errorf("%s : %w", op, err)
+		return nil, fmt.Errorf("%s : failed to unmarshal json : %w", op, err)
 	}
 
 	return user, nil
@@ -443,12 +382,12 @@ func (r *UserRepository) SetUserToCache(ctx context.Context, user *models.User) 
 
 	userJson, err := json.Marshal(user)
 	if err != nil {
-		return fmt.Errorf("%s : %w", op, err)
+		return fmt.Errorf("%s : failed to marshal json : %w", op, err)
 	}
 
 	err = r.cache.Set(ctx, fmt.Sprintf("%s%s", UsersCachePref, user.Id.String()), userJson)
 	if err != nil {
-		return fmt.Errorf("%s : %w", op, err)
+		return fmt.Errorf("%s : failed to write to cache : %w", op, err)
 	}
 
 	return nil
@@ -459,8 +398,8 @@ func (r *UserRepository) DeleteUserFromCache(ctx context.Context, id uuid.UUID) 
 
 	err := r.cache.Delete(ctx, fmt.Sprintf("%s%s", UsersCachePref, id.String()))
 	if err != nil {
-		return fmt.Errorf("%s : %w", op, err)
+		return fmt.Errorf("%s : failed to delete from cache : %w", op, err)
 	}
 
 	return nil
-}
+} //TODO: ДОБАВИТЬ В УДАЛЕНИЕ ПОЛЬЗОВАТЕЛЯ

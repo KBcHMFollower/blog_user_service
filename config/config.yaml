@@ -19,5 +19,5 @@ redis:
   db : 0
   cache_ttl: 1h
 rabbitmq:
-  addr: "amqp://localhost:5672"
+  addr: "amqp://guest:guest@localhost:5672"
 

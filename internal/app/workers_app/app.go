@@ -1,6 +1,8 @@
 package workers_app
 
-import "context"
+import (
+	"context"
+)
 
 type Worker interface {
 	Run(ctx context.Context) error
@@ -23,7 +25,6 @@ func (app *WorkersApp) AddWorker(worker Worker) {
 }
 
 func (app *WorkersApp) Run() error {
-
 	for _, worker := range app.workers {
 		if err := worker.Run(app.ctx); err != nil {
 			app.Stop()

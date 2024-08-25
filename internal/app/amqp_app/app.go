@@ -2,14 +2,14 @@ package amqp_app
 
 import (
 	"fmt"
-	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqp"
-	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqp/rabbitmqclient"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient/rabbitmqclient"
 	"github.com/KBcHMFollower/blog_user_service/internal/config"
 )
 
 type AmqpApp struct {
-	Client   amqp.AmqpClient
-	handlers map[string]amqp.AmqpHandlerFunc
+	Client   amqpclient.AmqpClient
+	handlers map[string]amqpclient.AmqpHandlerFunc
 }
 
 func NewAmqpApp(rabbitmqConnectInfo config.RabbitMq) (*AmqpApp, error) {
@@ -20,11 +20,11 @@ func NewAmqpApp(rabbitmqConnectInfo config.RabbitMq) (*AmqpApp, error) {
 
 	return &AmqpApp{
 		Client:   rabbitMqApp,
-		handlers: make(map[string]amqp.AmqpHandlerFunc),
+		handlers: make(map[string]amqpclient.AmqpHandlerFunc),
 	}, nil
 }
 
-func (app *AmqpApp) RegisterHandler(name string, handler amqp.AmqpHandlerFunc) {
+func (app *AmqpApp) RegisterHandler(name string, handler amqpclient.AmqpHandlerFunc) {
 	app.handlers[name] = handler
 }
 
