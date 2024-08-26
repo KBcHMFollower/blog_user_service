@@ -8,16 +8,15 @@ import (
 )
 
 type User struct {
-	Id          uuid.UUID `json:"id"`
-	Email       string    `json:"email"`
-	FName       string    `json:"fname"`
-	LName       string    `json:"lname"`
-	Avatar      string    `json:"avatar"`
-	AvatarMin   string    `json:"avatar_min"`
-	IsDeleted   bool      `json:"is_deleted"`
-	PassHash    []byte    `json:"pass_hash"`
-	CreatedDate time.Time `json:"created_date"`
-	UpdatedDate time.Time `json:"updated_date"`
+	Id          uuid.UUID `db:"id"`
+	Email       string    `db:"email"`
+	FName       string    `db:"fname"`
+	LName       string    `db:"lname"`
+	Avatar      string    `db:"avatar"`
+	AvatarMin   string    `db:"avatar_min"`
+	PassHash    []byte    `db:"pass_hash"`
+	CreatedDate time.Time `db:"created_date"`
+	UpdatedDate time.Time `db:"updated_date"`
 }
 
 func NewUserModel(email string, fName string, lName string, hashPass []byte) *User {
@@ -40,7 +39,6 @@ func (u *User) ConvertToProto() *usersv1.User {
 		Lname:       u.LName,
 		Avatar:      u.Avatar,
 		AvatarMin:   u.AvatarMin,
-		IsDeleted:   u.IsDeleted,
 		CreatedDate: u.CreatedDate.String(),
 		UpdatedDate: u.UpdatedDate.String(),
 	}
@@ -64,7 +62,6 @@ func (u *User) GetPointersArray() []interface{} {
 		&u.LName,
 		&u.Avatar,
 		&u.AvatarMin,
-		&u.IsDeleted,
 		&u.PassHash,
 		&u.CreatedDate,
 		&u.UpdatedDate,

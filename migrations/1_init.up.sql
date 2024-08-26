@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS users
     lname TEXT NOT NULL,
     avatar TEXT,
     avatar_min TEXT,
-    is_deleted BOOLEAN DEFAULT FALSE,
     pass_hash BYTEA NOT NULL,
     created_date  DATE DEFAULT CURRENT_DATE,
     updated_date DATE DEFAULT CURRENT_DATE
@@ -39,7 +38,5 @@ CREATE TABLE IF NOT EXISTS request_keys
 (
     id UUID PRIMARY KEY ,
     idempotency_key UUID NOT NULL ,
-    payload JSON NULL,
-    status TEXT NOT NULL DEFAULT 'in_work'
 );
 CREATE INDEX IF NOT EXISTS idx_ikey ON request_keys(idempotency_key);

@@ -27,7 +27,6 @@ func NewRequestsService(reqRepository repository.RequestsStore, log *slog.Logger
 	}
 }
 
-// TODO: ДОБАВИТЬ ИНТЕРЦЕПТОРЫ С ЭТИМ МЕТОДОМ
 func (rs *RequestsService) CheckAndCreate(ctx context.Context, checkInfo services_transfer.RequestsCheckExistsInfo) (bool, error) {
 	op := "RequestsService.CheckAndCreate"
 

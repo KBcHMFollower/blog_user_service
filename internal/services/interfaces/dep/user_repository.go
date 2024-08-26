@@ -28,6 +28,7 @@ type UserUpdater interface {
 type UserCreator interface {
 	CreateUser(ctx context.Context, createDto *repositories_transfer.CreateUserInfo) (uuid.UUID, error)
 	SetUserToCache(ctx context.Context, user *models.User) error
+	RollBackUser(ctx context.Context, user models.User) error
 }
 
 type UserDeleter interface {

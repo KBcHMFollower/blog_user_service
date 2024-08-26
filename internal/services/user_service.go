@@ -10,6 +10,7 @@ import (
 	"github.com/KBcHMFollower/blog_user_service/internal/domain"
 	repositories_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
+	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
 	"github.com/KBcHMFollower/blog_user_service/internal/lib/tokens"
 	dep "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces/dep"
 	services_utils "github.com/KBcHMFollower/blog_user_service/internal/services/lib"
@@ -61,10 +62,10 @@ func NewUserService(log *slog.Logger, tokenTtl time.Duration, tokenSecret string
 	}
 }
 
-// fname и lname не работают
+// TODO: fname и lname не работают
 func (a *UserService) RegisterUser(ctx context.Context, req *transfer.RegisterInfo) (*transfer.TokenResult, error) {
 
-	op := "authService/registerUser"
+	op := "UserService/registerUser"
 
 	log := a.log.With(
 		slog.String("op", op),
@@ -101,7 +102,7 @@ func (a *UserService) RegisterUser(ctx context.Context, req *transfer.RegisterIn
 
 func (a *UserService) LoginUser(ctx context.Context, loginInfo *transfer.LoginInfo) (*transfer.TokenResult, error) {
 
-	op := "authService/loginUser"
+	op := "UserService/loginUser"
 
 	log := a.log.With(
 		slog.String("op", op),
@@ -133,7 +134,7 @@ func (a *UserService) LoginUser(ctx context.Context, loginInfo *transfer.LoginIn
 
 func (a *UserService) CheckAuth(ctx context.Context, authInfo *transfer.CheckAuthInfo) (*transfer.TokenResult, error) {
 
-	op := "authService/checkAuth"
+	op := "UserService/checkAuth"
 
 	log := a.log.With(
 		slog.String("op", op),
@@ -353,7 +354,7 @@ func (a *UserService) DeleteUser(ctx context.Context, deleteInfo *transfer.Delet
 		resErr = services_utils.HandleErrInTransaction(resErr, tx)
 	}()
 
-	user, err := a.GetUserById(ctx, deleteInfo.Id)
+	user, err := a.userRep.GetUserById(ctx, deleteInfo.Id, tx)
 	if err != nil {
 		log.Error("can`t get user by id: ", resErr)
 		return domain.AddOpInErr(err, op)
@@ -373,18 +374,19 @@ func (a *UserService) DeleteUser(ctx context.Context, deleteInfo *transfer.Delet
 
 	eventId := uuid.New()
 
-	messageEntity := messages.UserDeletedMessage{ //TODO: ПЕРЕДЕЛАТЬ MESSAGE, ПОЛЬЗОВАТЕЛЬ ДОЛЖЕН БЫТЬ ОТДЕЛЬНО
-		IsDeleted:   false,
-		FName:       user.User.FName,
-		LName:       user.User.LName,
-		Email:       user.User.Email,
-		PassHash:    []byte("TODO"),
-		EventId:     eventId,
-		Id:          user.User.Id,
-		Avatar:      user.User.Avatar,
-		AvatarMin:   user.User.AvatarMini,
-		CreatedDate: time.Now(),
-		UpdatedDate: time.Now(),
+	messageEntity := messages.UserDeletedMessage{
+		User: messages.UserMessage{
+			FName:       user.FName,
+			LName:       user.LName,
+			Email:       user.Email,
+			PassHash:    user.PassHash,
+			Id:          user.Id,
+			Avatar:      user.Avatar,
+			AvatarMin:   user.AvatarMin,
+			CreatedDate: user.CreatedDate,
+			UpdatedDate: user.UpdatedDate,
+		},
+		EventId: eventId,
 	}
 
 	messageJson, err := json.Marshal(messageEntity)
@@ -467,7 +469,7 @@ func (a *UserService) UploadAvatar(ctx context.Context, uploadInfo *transfer.Upl
 	}, nil
 }
 
-func (a *UserService) CompensateDeletedUser(ctx context.Context, eventId uuid.UUID) error { //TODO: ПЕРЕПИСАТЬ
+func (a *UserService) CompensateDeletedUser(ctx context.Context, eventId uuid.UUID) error {
 	op := "UserService/CompensateDeletedUser"
 	log := a.log.With(
 		slog.String("op", op))
@@ -478,18 +480,23 @@ func (a *UserService) CompensateDeletedUser(ctx context.Context, eventId uuid.UU
 		return domain.AddOpInErr(err, op)
 	}
 
-	var user messages.UserDeletedMessage
-	if err := json.Unmarshal([]byte(eventInfo.Payload), &user); err != nil {
+	var message messages.UserDeletedMessage
+	if err := json.Unmarshal([]byte(eventInfo.Payload), &message); err != nil {
 		log.Error("can`t unmarshal event: ", err)
 		return domain.AddOpInErr(err, op)
 	}
-	//TODO: ПЕРЕДЕЛАТЬ МЕССАГ
-	_, err = a.userRep.CreateUser(ctx, &repositories_transfer.CreateUserInfo{
-		Email:    user.Email,
-		FName:    user.FName,
-		LName:    user.LName,
-		HashPass: user.PassHash,
-	}) //TODO : Create new metod from user compensate
+
+	err = a.userRep.RollBackUser(ctx, models.User{
+		Id:          message.User.Id,
+		Email:       message.User.Email,
+		PassHash:    message.User.PassHash,
+		FName:       message.User.FName,
+		LName:       message.User.LName,
+		CreatedDate: message.User.CreatedDate,
+		UpdatedDate: time.Now(),
+		Avatar:      message.User.Avatar,
+		AvatarMin:   message.User.AvatarMin,
+	})
 	if err != nil {
 		log.Error("can`t create user in db: ", err)
 		return domain.AddOpInErr(err, op)

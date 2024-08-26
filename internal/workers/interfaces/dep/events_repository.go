@@ -3,13 +3,14 @@ package workers_dep
 import (
 	"context"
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
+	"github.com/KBcHMFollower/blog_user_service/internal/repository"
 	"github.com/google/uuid"
 )
 
 type EventUpdater interface {
-	SetSentStatusesInEvents(ctx context.Context, eventsId []uuid.UUID) error
+	SetStatusInEvents(ctx context.Context, eventsId []uuid.UUID, status repository.MessageStatus) error
 }
 
 type EventGetter interface {
-	GetEvents(ctx context.Context, filterTarget string, filterValue interface{}, limit uint64) ([]*models.EventInfo, error)
+	GetEventsWithStatus(ctx context.Context, status repository.MessageStatus, limit uint64) ([]*models.EventInfo, error)
 }

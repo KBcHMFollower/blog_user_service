@@ -9,6 +9,7 @@ import (
 	"github.com/KBcHMFollower/blog_user_service/internal/database"
 	transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	rep_utils "github.com/KBcHMFollower/blog_user_service/internal/repository/lib"
+	"reflect"
 	"time"
 
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
@@ -36,13 +37,13 @@ func NewUserRepository(dbDriver database.DBWrapper, cacheStorage cashe.CasheStor
 func (r *UserRepository) getSubInfo(ctx context.Context, getInfo transfer.GetSubscriptionInfo) ([]*models.Subscriber, uint32, error) {
 	op := "UserRepository.getSubInfo"
 
-	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	builder := rep_utils.QBuilder.PHFormat(squirrel.Dollar)
 	subscribers := make([]*models.Subscriber, 0)
 
 	offset := (getInfo.Page - 1) * getInfo.Size
 
 	query := builder.
-		Select("*").
+		ModelSelect(reflect.TypeFor[models.Subscriber]()).
 		From(SubscribersTable).
 		Where(squirrel.Eq{getInfo.TargetType: getInfo.UserId}).
 		Limit(getInfo.Size).
@@ -124,6 +125,42 @@ func (r *UserRepository) CreateUser(ctx context.Context, createDto *transfer.Cre
 	}
 
 	return id, nil
+}
+
+func (r *UserRepository) RollBackUser(ctx context.Context, user models.User) error {
+	op := "UserRepository.RollBackUser"
+
+	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+
+	query := builder.Insert(UsersTable).
+		SetMap(map[string]interface{}{ //TODO: МОЖЕТ ЕСТЬ КАКАЯ-ТО ХЕРНЯ, КОТОРАЯ САМА МАПИТ?
+			"id":           user.Id,
+			"email":        user.Email,
+			"pass_hash":    user.PassHash,
+			"avatar":       user.Avatar,
+			"avatar_min":   user.AvatarMin,
+			"fname":        user.FName,
+			"lname":        user.LName,
+			"created_date": user.CreatedDate,
+			"updated_date": time.Now(),
+		}).
+		Suffix("RETURNING \"id\"")
+
+	toSql, args, err := query.ToSql()
+	if err != nil {
+		return fmt.Errorf("%s : failed to build toSql query : %w", op, err)
+	}
+
+	row := r.db.QueryRowContext(ctx, toSql, args...)
+
+	var id uuid.UUID
+
+	err = row.Scan(&id)
+	if err != nil {
+		return fmt.Errorf("%s : failed to scan row : %w", op, err)
+	}
+
+	return nil
 }
 
 func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {

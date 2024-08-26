@@ -17,8 +17,10 @@ const (
 	messagesTable = "amqp_messages"
 )
 
+type MessageStatus string
+
 const (
-	messagesStatusCol    = "status"
+	MessagesStatusCol    = "status"
 	messagesEventIdCol   = "event_id"
 	messagesAllCol       = "*"
 	messagesEventTypeCol = "event_type"
@@ -26,7 +28,9 @@ const (
 )
 
 const (
-	SentStatus = "sent"
+	MessagesSentStatus    MessageStatus = "sent"
+	MessagesErrorStatus   MessageStatus = "error"
+	MessagesWaitingStatus MessageStatus = "waiting"
 )
 
 type EventFilter struct {
@@ -40,7 +44,7 @@ func NewEventRepository(dbDriver database.DBWrapper) *EventRepository {
 	return &EventRepository{db: dbDriver}
 }
 
-func (r *EventRepository) GetEvents(ctx context.Context, filterTarget string, filterValue interface{}, limit uint64) ([]*models.EventInfo, error) {
+func (r *EventRepository) GetEventsWithStatus(ctx context.Context, status MessageStatus, limit uint64) ([]*models.EventInfo, error) {
 	op := "UserRepository.getSubInfo"
 
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
@@ -49,7 +53,7 @@ func (r *EventRepository) GetEvents(ctx context.Context, filterTarget string, fi
 	query := builder.
 		Select(messagesAllCol).
 		From(messagesTable).
-		Where(squirrel.Eq{filterTarget: filterValue}).
+		Where(squirrel.Eq{MessagesStatusCol: status}).
 		Limit(limit)
 
 	toSql, args, err := query.ToSql()
@@ -77,7 +81,7 @@ func (r *EventRepository) GetEvents(ctx context.Context, filterTarget string, fi
 	return eventInfos, nil
 }
 
-func (r *EventRepository) SetSentStatusesInEvents(ctx context.Context, eventsId []uuid.UUID) error {
+func (r *EventRepository) SetStatusInEvents(ctx context.Context, eventsId []uuid.UUID, status MessageStatus) error {
 	op := "UserRepository.getSubInfo"
 
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
@@ -85,7 +89,7 @@ func (r *EventRepository) SetSentStatusesInEvents(ctx context.Context, eventsId 
 	query := builder.
 		Update(messagesTable).
 		Where(squirrel.Eq{messagesEventIdCol: eventsId}).
-		Set(messagesStatusCol, "sent")
+		Set(MessagesStatusCol, status)
 
 	sql, args, err := query.ToSql()
 	if err != nil {
@@ -132,7 +136,7 @@ func (r *EventRepository) Create(ctx context.Context, info repositories_transfer
 	op := "UserRepository.create"
 
 	executor := rep_utils.GetExecutor(r.db, tx)
-	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	builder := rep_utils.QBuilder.PHFormat(squirrel.Dollar)
 
 	query := builder.
 		Insert(messagesTable).

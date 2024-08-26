@@ -48,8 +48,8 @@ func (r *RequestsRepository) Create(ctx context.Context, info repositories_trans
 
 	query := builder.
 		Insert(database.RequestKeysTable).
-		Columns(rKeysIdCol, rKeysIdempotencyKeyCol, rKeysPayloadCol).
-		Values(request.Id, request.IdempotencyKey, []byte("{\"adawsd\" : \"awsdaw\"}")) //TODO: УБРАТЬ
+		Columns(rKeysIdCol, rKeysIdempotencyKeyCol).
+		Values(request.Id, request.IdempotencyKey)
 
 	toSql, args, err := query.ToSql()
 	if err != nil {

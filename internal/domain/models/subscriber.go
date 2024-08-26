@@ -5,9 +5,9 @@ import (
 )
 
 type Subscriber struct {
-	Id           uuid.UUID
-	BloggerId    uuid.UUID
-	SubscriberId uuid.UUID
+	Id           uuid.UUID `db:"id"`
+	BloggerId    uuid.UUID `db:"blogger_id"`
+	SubscriberId uuid.UUID `db:"subscriber_id"`
 }
 
 func NewSubscriber(bloggerId uuid.UUID, sybscriberId uuid.UUID) *Subscriber {

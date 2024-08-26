@@ -1,7 +1,6 @@
 package config
 
 import (
-	"flag"
 	"os"
 	"time"
 
@@ -51,8 +50,7 @@ type Storage struct {
 	MigrationPath    string `yaml:"migration_path" env-required:"true"`
 }
 
-func MustLoad() *Config {
-	configPath := fetchConfigPath()
+func MustLoad(configPath string) *Config {
 	if configPath == "" {
 		panic("config path is empty")
 	}
@@ -72,17 +70,4 @@ func MustLoadPath(configPath string) *Config {
 	}
 
 	return &cfg
-}
-
-func fetchConfigPath() string {
-	var res string
-
-	flag.StringVar(&res, "config", "", "path to config file")
-	flag.Parse()
-
-	if res == "" {
-		res = os.Getenv("CONFIG_PATH")
-	}
-
-	return res
 }

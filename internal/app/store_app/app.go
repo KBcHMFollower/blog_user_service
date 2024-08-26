@@ -52,8 +52,13 @@ func New(postgresConnectionInfo config.Storage, redisConnectionInfo config.Redis
 }
 
 func (app *StoreApp) Run() error {
-	if err := database.ForceMigrate(app.PostgresStore.db, app.PostgresStore.migrationPath); err != nil {
-		log.Fatalf("error in process db connection : %w", err)
+	if err := database.ForceMigrate(
+		app.PostgresStore.db,
+		app.PostgresStore.migrationPath,
+		database.MigrateUp,
+		database.Postgres,
+	); err != nil {
+		log.Fatalf("error in process db connection : %v", err)
 		return err
 	}
 

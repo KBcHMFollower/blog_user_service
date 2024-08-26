@@ -5,17 +5,13 @@ import (
 )
 
 type Request struct {
-	Id             uuid.UUID
-	IdempotencyKey uuid.UUID
-	Payload        []byte //TODO: УБРАТЬ
-	Status         string
+	Id             uuid.UUID `db:"id"`
+	IdempotencyKey uuid.UUID `db:"idempotency_key"`
 }
 
 func (r *Request) GetPointersArray() []interface{} {
 	return []interface{}{
 		&r.Id,
 		&r.IdempotencyKey,
-		&r.Payload,
-		&r.Status,
 	}
 }
