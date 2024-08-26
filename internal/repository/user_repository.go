@@ -9,7 +9,6 @@ import (
 	"github.com/KBcHMFollower/blog_user_service/internal/database"
 	transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	rep_utils "github.com/KBcHMFollower/blog_user_service/internal/repository/lib"
-	"reflect"
 	"time"
 
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
@@ -37,13 +36,13 @@ func NewUserRepository(dbDriver database.DBWrapper, cacheStorage cashe.CasheStor
 func (r *UserRepository) getSubInfo(ctx context.Context, getInfo transfer.GetSubscriptionInfo) ([]*models.Subscriber, uint32, error) {
 	op := "UserRepository.getSubInfo"
 
-	builder := rep_utils.QBuilder.PHFormat(squirrel.Dollar)
+	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	subscribers := make([]*models.Subscriber, 0)
 
 	offset := (getInfo.Page - 1) * getInfo.Size
 
 	query := builder.
-		ModelSelect(reflect.TypeFor[models.Subscriber]()).
+		Select("*").
 		From(SubscribersTable).
 		Where(squirrel.Eq{getInfo.TargetType: getInfo.UserId}).
 		Limit(getInfo.Size).
