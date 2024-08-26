@@ -54,9 +54,9 @@ func (ub UpdateBuilder) St(column string, value interface{}) UpdateBuilder {
 	return UpdateBuilder{ub.Set(column, value)}
 }
 
-func (ib InsertBuilder) SetModelMap(model any) squirrel.InsertBuilder {
+func (ib InsertBuilder) SetModelMap(model any) InsertBuilder {
 	modelMap := convertModelToMap(model)
-	return ib.SetMap(modelMap)
+	return InsertBuilder{ib.SetMap(modelMap)}
 }
 
 func (ib InsertBuilder) Cols(columns ...string) InsertBuilder {

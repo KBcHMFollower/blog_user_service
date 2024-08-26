@@ -38,7 +38,7 @@ func NewRequestsRepository(db database.DBWrapper) *RequestsRepository {
 func (r *RequestsRepository) Create(ctx context.Context, info repositories_transfer.CreateRequestInfo, tx *sql.Tx) error {
 	op := "RequestsRepository.create"
 
-	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	builder := rep_utils.QBuilder.PHFormat(squirrel.Dollar)
 	executor := rep_utils.GetExecutor(r.db, tx)
 
 	request := models.Request{
@@ -47,18 +47,12 @@ func (r *RequestsRepository) Create(ctx context.Context, info repositories_trans
 	}
 
 	query := builder.
-		Insert(database.RequestKeysTable).
-		Columns(rKeysIdCol, rKeysIdempotencyKeyCol).
-		Values(request.Id, request.IdempotencyKey)
+		Ins(database.RequestKeysTable).
+		Cols(rKeysIdCol, rKeysIdempotencyKeyCol).
+		Vls(request.Id, request.IdempotencyKey)
 
-	toSql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("%s : failed to generate sql query : %w", op, err)
-	}
-
-	res := executor.QueryRowContext(ctx, toSql, args...)
-	if err := res.Err(); err != nil {
-		return fmt.Errorf("%s : failed to execute query : %w", op, err)
+	if _, err := query.ExcCtx(ctx, executor); err != nil {
+		return fmt.Errorf("%s : failed to execute query: %w", op, err)
 	}
 
 	return nil
@@ -67,21 +61,17 @@ func (r *RequestsRepository) Create(ctx context.Context, info repositories_trans
 func (r *RequestsRepository) Get(ctx context.Context, key uuid.UUID, tx *sql.Tx) (*models.Request, error) {
 	op := "RequestsRepository.get"
 
-	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	builder := rep_utils.QBuilder.PHFormat(squirrel.Dollar)
 	executor := rep_utils.GetExecutor(r.db, tx)
 
 	query := builder.
-		Select(rKeysAllCol).
-		From(database.RequestKeysTable).
-		Where(squirrel.Eq{rKeysIdempotencyKeyCol: key})
-
-	toSql, args, _ := query.ToSql()
+		Sel(rKeysAllCol).
+		Frm(database.RequestKeysTable).
+		Wr(squirrel.Eq{rKeysIdempotencyKeyCol: key})
 
 	var request models.Request
 
-	row := executor.QueryRowContext(ctx, toSql, args...)
-	err := row.Scan(request.GetPointersArray()...)
-	if err != nil {
+	if err := query.QryRowCtx(ctx, executor, &request); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
