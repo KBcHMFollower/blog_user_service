@@ -2,7 +2,7 @@ package services_dep_interfaces
 
 import (
 	"context"
-	"database/sql"
+	"github.com/KBcHMFollower/blog_user_service/internal/database"
 	repositories_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
 	"github.com/google/uuid"
@@ -10,7 +10,7 @@ import (
 
 type UserGetter interface {
 	GetUserByEmail(ctx context.Context, email string) (*models.User, error)
-	GetUserById(ctx context.Context, userId uuid.UUID, tx *sql.Tx) (*models.User, error)
+	GetUserById(ctx context.Context, userId uuid.UUID, tx database.Transaction) (*models.User, error)
 	TryGetUserFromCache(ctx context.Context, id uuid.UUID) (*models.User, error)
 }
 
@@ -22,7 +22,7 @@ type SubscribeManager interface {
 }
 
 type UserUpdater interface {
-	UpdateUser(ctx context.Context, updateData repositories_transfer.UpdateUserInfo, tx *sql.Tx) error
+	UpdateUser(ctx context.Context, updateData repositories_transfer.UpdateUserInfo, tx database.Transaction) error
 }
 
 type UserCreator interface {
@@ -32,6 +32,6 @@ type UserCreator interface {
 }
 
 type UserDeleter interface {
-	DeleteUser(ctx context.Context, delInfo repositories_transfer.DeleteUserInfo, tx *sql.Tx) error
+	DeleteUser(ctx context.Context, delInfo repositories_transfer.DeleteUserInfo, tx database.Transaction) error
 	DeleteUserFromCache(ctx context.Context, id uuid.UUID) error
 }

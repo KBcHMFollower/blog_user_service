@@ -2,14 +2,12 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/cashe"
 	"github.com/KBcHMFollower/blog_user_service/internal/database"
 	transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	rep_utils "github.com/KBcHMFollower/blog_user_service/internal/repository/lib"
-	"reflect"
 	"time"
 
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
@@ -37,13 +35,12 @@ func NewUserRepository(dbDriver database.DBWrapper, cacheStorage cashe.CasheStor
 func (r *UserRepository) getSubInfo(ctx context.Context, getInfo transfer.GetSubscriptionInfo) ([]*models.Subscriber, uint32, error) {
 	op := "UserRepository.getSubInfo"
 
-	builder := rep_utils.QBuilder.PHFormat(squirrel.Dollar)
-	subscribers := make([]*models.Subscriber, 0)
+	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	offset := (getInfo.Page - 1) * getInfo.Size
 
 	query := builder.
-		ModelSelect(reflect.TypeFor[models.Subscriber]()).
+		Select("*").
 		From(SubscribersTable).
 		Where(squirrel.Eq{getInfo.TargetType: getInfo.UserId}).
 		Limit(getInfo.Size).
@@ -51,24 +48,12 @@ func (r *UserRepository) getSubInfo(ctx context.Context, getInfo transfer.GetSub
 
 	toSql, args, err := query.ToSql()
 	if err != nil {
-		return subscribers, 0, fmt.Errorf("%s : failed to build sql query : %w", op, err)
+		return nil, 0, fmt.Errorf("%s : failed to build sql query : %w", op, err)
 	}
 
-	rows, err := r.db.QueryContext(ctx, toSql, args...)
-	if err != nil {
-		return subscribers, 0, fmt.Errorf("%s : failed to execute sql : %w", op, err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var subscriber models.Subscriber
-
-		err := rows.Scan(subscriber.GetPointersArray()...)
-		if err != nil {
-			return subscribers, 0, fmt.Errorf("%s : failed to scan row : %w", op, err)
-		}
-
-		subscribers = append(subscribers, &subscriber)
+	subscribers := make([]*models.Subscriber, 0)
+	if err := r.db.SelectContext(ctx, &subscribers, toSql, args...); err != nil {
+		return nil, 0, fmt.Errorf("%s : failed to execute sql : %w", op, err)
 	}
 
 	query = builder.
@@ -82,10 +67,8 @@ func (r *UserRepository) getSubInfo(ctx context.Context, getInfo transfer.GetSub
 	}
 
 	var totalCount uint32
-
-	countRow := r.db.QueryRowContext(ctx, toSql, args...)
-	if err := countRow.Scan(&totalCount); err != nil {
-		return nil, 0, fmt.Errorf("%s : failed to scan row : %w", op, err)
+	if err := r.db.GetContext(ctx, &totalCount, toSql, args...); err != nil {
+		return nil, 0, fmt.Errorf("%s : failed to execute sql : %w", op, err)
 	}
 
 	return subscribers, totalCount, nil
@@ -115,13 +98,9 @@ func (r *UserRepository) CreateUser(ctx context.Context, createDto *transfer.Cre
 		return uuid.Nil, fmt.Errorf("%s : failed to build sql query : %w", op, err)
 	}
 
-	row := r.db.QueryRowContext(ctx, sql, args...)
-
 	var id uuid.UUID
-
-	err = row.Scan(&id)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("%s : failed to scan row : %w", op, err)
+	if err := r.db.GetContext(ctx, &id, sql, args...); err != nil {
+		return uuid.Nil, fmt.Errorf("%s : failed to execute sql : %w", op, err)
 	}
 
 	return id, nil
@@ -151,13 +130,9 @@ func (r *UserRepository) RollBackUser(ctx context.Context, user models.User) err
 		return fmt.Errorf("%s : failed to build toSql query : %w", op, err)
 	}
 
-	row := r.db.QueryRowContext(ctx, toSql, args...)
-
 	var id uuid.UUID
-
-	err = row.Scan(&id)
-	if err != nil {
-		return fmt.Errorf("%s : failed to scan row : %w", op, err)
+	if err := r.db.GetContext(ctx, &id, toSql, args...); err != nil {
+		return fmt.Errorf("%s : failed to execute sql : %w", op, err)
 	}
 
 	return nil
@@ -176,18 +151,14 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 	}
 
 	var user models.User
-
-	row := r.db.QueryRowContext(ctx, sql, args...)
-
-	err = row.Scan(user.GetPointersArray()...)
-	if err != nil {
-		return nil, fmt.Errorf("%s : failed to scan row : %w", op, err)
+	if err := r.db.GetContext(ctx, &user, sql, args...); err != nil {
+		return nil, fmt.Errorf("%s : failed to execute sql : %w", op, err)
 	}
 
 	return &user, nil
 }
 
-func (r *UserRepository) GetUserById(ctx context.Context, userId uuid.UUID, tx *sql.Tx) (*models.User, error) {
+func (r *UserRepository) GetUserById(ctx context.Context, userId uuid.UUID, tx database.Transaction) (*models.User, error) {
 	op := "UserRepository.GetUserById"
 
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
@@ -202,12 +173,8 @@ func (r *UserRepository) GetUserById(ctx context.Context, userId uuid.UUID, tx *
 	}
 
 	var user models.User
-
-	row := executor.QueryRowContext(ctx, sql, args...)
-
-	err = row.Scan(user.GetPointersArray()...)
-	if err != nil {
-		return nil, fmt.Errorf("%s : failed to scan row : %w", op, err)
+	if err := executor.GetContext(ctx, &user, sql, args...); err != nil {
+		return nil, fmt.Errorf("%s : failed to execute sql : %w", op, err)
 	}
 
 	return &user, nil
@@ -217,7 +184,6 @@ func (r *UserRepository) GetUserSubscribers(ctx context.Context, getInfo transfe
 	op := "UserRepository.GetUserSubscribers"
 
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	users := make([]*models.User, 0)
 
 	subscribers, totalCount, err := r.getSubInfo(ctx, transfer.GetSubscriptionInfo{
 		UserId:     getInfo.UserId,
@@ -226,7 +192,7 @@ func (r *UserRepository) GetUserSubscribers(ctx context.Context, getInfo transfe
 		TargetType: "blogger_id",
 	})
 	if err != nil {
-		return users, totalCount, fmt.Errorf("%s : %w", op, err)
+		return nil, totalCount, fmt.Errorf("%s : %w", op, err)
 	}
 
 	subscribersId := make([]uuid.UUID, 0)
@@ -239,22 +205,12 @@ func (r *UserRepository) GetUserSubscribers(ctx context.Context, getInfo transfe
 		Where(squirrel.Eq{"id": subscribersId}).
 		ToSql()
 	if err != nil {
-		return users, totalCount, fmt.Errorf("%s : failed to build sql query : %w", op, err)
+		return nil, totalCount, fmt.Errorf("%s : failed to build sql query : %w", op, err)
 	}
 
-	rows, err := r.db.QueryContext(ctx, sql, args...)
-	if err != nil {
-		return users, 0, fmt.Errorf("%s : failed to execute sql : %w", op, err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var user models.User
-		err = rows.Scan(user.GetPointersArray()...)
-		if err != nil {
-			return users, 0, fmt.Errorf("%s : failed to scan row : %w", op, err)
-		}
-		users = append(users, &user)
+	users := make([]*models.User, 0)
+	if err := r.db.SelectContext(ctx, &users, sql, args...); err != nil {
+		return nil, totalCount, fmt.Errorf("%s : failed to execute sql : %w", op, err)
 	}
 
 	return users, totalCount, nil
@@ -264,7 +220,6 @@ func (r *UserRepository) GetUserSubscriptions(ctx context.Context, getInfo trans
 	op := "UserRepository.GetUserSubscribers"
 
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	users := make([]*models.User, 0)
 
 	subscribers, totalCount, err := r.getSubInfo(ctx, transfer.GetSubscriptionInfo{
 		UserId:     getInfo.UserId,
@@ -273,7 +228,7 @@ func (r *UserRepository) GetUserSubscriptions(ctx context.Context, getInfo trans
 		TargetType: "subscriber_id",
 	})
 	if err != nil {
-		return users, totalCount, fmt.Errorf("%s : failed to get sub info : %w", op, err)
+		return nil, totalCount, fmt.Errorf("%s : failed to get sub info : %w", op, err)
 	}
 
 	subscribersId := make([]uuid.UUID, 0)
@@ -286,25 +241,15 @@ func (r *UserRepository) GetUserSubscriptions(ctx context.Context, getInfo trans
 		Where(squirrel.Eq{"id": subscribersId}).
 		ToSql()
 
-	rows, err := r.db.QueryContext(ctx, sql, args...)
-	if err != nil {
-		return users, 0, fmt.Errorf("%s : failed to execute sql : %w", op, err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var user models.User
-		err = rows.Scan(user.GetPointersArray()...)
-		if err != nil {
-			return users, 0, fmt.Errorf("%s : failed to scan row : %w", op, err)
-		}
-		users = append(users, &user)
+	users := make([]*models.User, 0)
+	if err := r.db.SelectContext(ctx, &users, sql, args...); err != nil {
+		return nil, totalCount, fmt.Errorf("%s : failed to execute sql : %w", op, err)
 	}
 
 	return users, totalCount, nil
 }
 
-func (r *UserRepository) UpdateUser(ctx context.Context, updateData transfer.UpdateUserInfo, tx *sql.Tx) error { //TODO
+func (r *UserRepository) UpdateUser(ctx context.Context, updateData transfer.UpdateUserInfo, tx database.Transaction) error { //TODO
 	op := "UserRepository.UpdateUser"
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	executor := rep_utils.GetExecutor(r.db, tx)
@@ -341,8 +286,11 @@ func (r *UserRepository) Subscribe(ctx context.Context, subInfo transfer.Subscri
 	subscribers := models.NewSubscriber(subInfo.BloggerId, subInfo.SubscriberId)
 
 	query := builder.Insert(SubscribersTable).
-		Columns("id", "blogger_id", "subscriber_id").
-		Values(subscribers.GetPointersArray()...)
+		SetMap(map[string]interface{}{
+			"id":            subscribers.Id,
+			"blogger_id":    subscribers.BloggerId,
+			"subscriber_id": subscribers.SubscriberId,
+		})
 
 	sql, args, err := query.ToSql()
 	if err != nil {
@@ -377,7 +325,7 @@ func (r *UserRepository) Unsubscribe(ctx context.Context, unsubInfo transfer.Uns
 	return nil
 }
 
-func (r *UserRepository) DeleteUser(ctx context.Context, delInfo transfer.DeleteUserInfo, tx *sql.Tx) error {
+func (r *UserRepository) DeleteUser(ctx context.Context, delInfo transfer.DeleteUserInfo, tx database.Transaction) error {
 	op := "UserRepository.DeleteUser"
 
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)

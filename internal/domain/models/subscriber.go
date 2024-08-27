@@ -17,11 +17,3 @@ func NewSubscriber(bloggerId uuid.UUID, sybscriberId uuid.UUID) *Subscriber {
 		SubscriberId: sybscriberId,
 	}
 }
-
-func (s *Subscriber) GetPointersArray() []interface{} {
-	return []interface{}{
-		&s.Id,
-		&s.BloggerId,
-		&s.SubscriberId,
-	}
-}

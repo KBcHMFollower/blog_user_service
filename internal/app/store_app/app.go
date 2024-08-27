@@ -8,6 +8,7 @@ import (
 	s3client "github.com/KBcHMFollower/blog_user_service/internal/clients/s3"
 	"github.com/KBcHMFollower/blog_user_service/internal/config"
 	"github.com/KBcHMFollower/blog_user_service/internal/database"
+	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"log"
 )
@@ -29,6 +30,7 @@ func New(postgresConnectionInfo config.Storage, redisConnectionInfo config.Redis
 	if err != nil {
 		return nil, fmt.Errorf("error in process db connection : %w", err)
 	}
+	sqlxDb := sqlx.NewDb(db, "postgres")
 
 	cacheStorage, err := cashe.NewRedisCache(redisConnectionInfo.Addr, redisConnectionInfo.Password, redisConnectionInfo.DB, redisConnectionInfo.CacheTTL)
 	if err != nil {
@@ -42,7 +44,7 @@ func New(postgresConnectionInfo config.Storage, redisConnectionInfo config.Redis
 
 	return &StoreApp{
 		PostgresStore: &PostgresStore{
-			Store:         &database.DBDriver{db},
+			Store:         &database.DBDriver{sqlxDb},
 			migrationPath: postgresConnectionInfo.MigrationPath,
 			db:            db,
 		},

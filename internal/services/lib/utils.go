@@ -1,12 +1,12 @@
 package services_utils
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/KBcHMFollower/blog_user_service/internal/database"
 )
 
-func HandleErrInTransaction(err error, tx *sql.Tx) error {
+func HandleErrInTransaction(err error, tx database.Transaction) error {
 	if err == nil {
 		return nil
 	}

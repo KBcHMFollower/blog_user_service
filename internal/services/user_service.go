@@ -174,7 +174,7 @@ func (a *UserService) GetUserById(ctx context.Context, userId uuid.UUID) (ersUse
 		slog.String("op", op),
 	)
 
-	tx, err := a.txCreator.BeginTx(ctx, nil)
+	tx, err := a.txCreator.BeginTxCtx(ctx, nil)
 	if err != nil {
 		log.Error("can`t begin tx: ", err)
 		return nil, domain.AddOpInErr(err, op)
@@ -260,7 +260,7 @@ func (a *UserService) UpdateUser(ctx context.Context, updateInfo *transfer.Updat
 	log := a.log.With(
 		slog.String("op", op))
 
-	tx, err := a.txCreator.BeginTx(ctx, nil)
+	tx, err := a.txCreator.BeginTxCtx(ctx, nil)
 	if err != nil {
 		log.Error("can`t begin tx: ", err)
 		return nil, domain.AddOpInErr(err, op)
@@ -345,7 +345,7 @@ func (a *UserService) DeleteUser(ctx context.Context, deleteInfo *transfer.Delet
 	log := a.log.With(
 		slog.String("op", op))
 
-	tx, err := a.txCreator.BeginTx(ctx, nil)
+	tx, err := a.txCreator.BeginTxCtx(ctx, nil)
 	if err != nil {
 		log.Error("can`t begin transaction: ", resErr)
 		return fmt.Errorf("%s : %w", op, resErr)
@@ -418,7 +418,7 @@ func (a *UserService) UploadAvatar(ctx context.Context, uploadInfo *transfer.Upl
 	log := a.log.With(
 		slog.String("op", op))
 
-	tx, err := a.txCreator.BeginTx(ctx, nil)
+	tx, err := a.txCreator.BeginTxCtx(ctx, nil)
 	if err != nil {
 		log.Error("can`t begin tx: ", err)
 		return nil, domain.AddOpInErr(err, op)

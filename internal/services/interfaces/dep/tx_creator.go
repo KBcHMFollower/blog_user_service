@@ -3,8 +3,9 @@ package services_dep_interfaces
 import (
 	"context"
 	"database/sql"
+	"github.com/KBcHMFollower/blog_user_service/internal/database"
 )
 
 type TransactionCreator interface {
-	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
+	BeginTxCtx(ctx context.Context, opts *sql.TxOptions) (database.Transaction, error)
 }

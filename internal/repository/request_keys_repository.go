@@ -35,7 +35,7 @@ func NewRequestsRepository(db database.DBWrapper) *RequestsRepository {
 	}
 }
 
-func (r *RequestsRepository) Create(ctx context.Context, info repositories_transfer.CreateRequestInfo, tx *sql.Tx) error {
+func (r *RequestsRepository) Create(ctx context.Context, info repositories_transfer.CreateRequestInfo, tx database.Transaction) error {
 	op := "RequestsRepository.create"
 
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
@@ -56,15 +56,14 @@ func (r *RequestsRepository) Create(ctx context.Context, info repositories_trans
 		return fmt.Errorf("%s : failed to generate sql query : %w", op, err)
 	}
 
-	res := executor.QueryRowContext(ctx, toSql, args...)
-	if err := res.Err(); err != nil {
+	if _, err := executor.ExecContext(ctx, toSql, args...); err != nil {
 		return fmt.Errorf("%s : failed to execute query : %w", op, err)
 	}
 
 	return nil
 }
 
-func (r *RequestsRepository) Get(ctx context.Context, key uuid.UUID, tx *sql.Tx) (*models.Request, error) {
+func (r *RequestsRepository) Get(ctx context.Context, key uuid.UUID, tx database.Transaction) (*models.Request, error) {
 	op := "RequestsRepository.get"
 
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
@@ -79,9 +78,7 @@ func (r *RequestsRepository) Get(ctx context.Context, key uuid.UUID, tx *sql.Tx)
 
 	var request models.Request
 
-	row := executor.QueryRowContext(ctx, toSql, args...)
-	err := row.Scan(request.GetPointersArray()...)
-	if err != nil {
+	if err := executor.GetContext(ctx, &request, toSql, args...); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}

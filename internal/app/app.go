@@ -66,7 +66,7 @@ func New(
 	workersApp := workers_app.New()
 	grpcApp := grpcapp.New(log, cfg.GRpc.Port, authService, interceptorsChain)
 
-	workersApp.AddWorker(workers.NewEventChecker(rabbitMqApp.Client, eventRepository, log))
+	workersApp.AddWorker(workers.NewEventChecker(rabbitMqApp.Client, eventRepository, log, storageApp.PostgresStore.Store))
 
 	return &App{
 		gRpcApp:    grpcApp,

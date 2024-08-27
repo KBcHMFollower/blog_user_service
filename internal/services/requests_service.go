@@ -5,7 +5,6 @@ import (
 	"github.com/KBcHMFollower/blog_user_service/internal/domain"
 	repositories_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	services_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
-	"github.com/KBcHMFollower/blog_user_service/internal/repository"
 	dep "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces/dep"
 	"log/slog"
 )
@@ -16,11 +15,11 @@ type RequestsStore interface {
 }
 
 type RequestsService struct {
-	reqRepository repository.RequestsStore
+	reqRepository RequestsStore
 	log           *slog.Logger
 }
 
-func NewRequestsService(reqRepository repository.RequestsStore, log *slog.Logger) *RequestsService {
+func NewRequestsService(reqRepository RequestsStore, log *slog.Logger) *RequestsService {
 	return &RequestsService{
 		reqRepository: reqRepository,
 		log:           log,
