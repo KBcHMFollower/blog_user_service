@@ -4,29 +4,34 @@ import (
 	"context"
 	usersv1 "github.com/KBcHMFollower/blog_user_service/api/protos/gen/users"
 	services_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
+	"github.com/KBcHMFollower/blog_user_service/internal/logger"
 	services_interfaces "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"log/slog"
 )
 
 type GRPCUsers struct {
 	usersv1.UnimplementedUsersServiceServer
 	userService services_interfaces.UserService
+	log         *slog.Logger
 }
 
-func RegisterUserServer(gRPC *grpc.Server, userService services_interfaces.UserService) {
-	usersv1.RegisterUsersServiceServer(gRPC, &GRPCUsers{userService: userService})
+func RegisterUserServer(gRPC *grpc.Server, userService services_interfaces.UserService, log *slog.Logger) {
+	usersv1.RegisterUsersServiceServer(gRPC, &GRPCUsers{userService: userService, log: log})
 }
 
 func (s *GRPCUsers) GetUser(ctx context.Context, req *usersv1.GetUserDTO) (*usersv1.GetUserRDO, error) {
 
 	userUuid, err := uuid.Parse(req.Id)
 	if err != nil {
+		s.log.ErrorContext(ctx, "Failed to parse user uuid", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
 	user, err := s.userService.GetUserById(ctx, userUuid)
 	if err != nil {
+		s.log.ErrorContext(ctx, "Failed to get user", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
@@ -38,6 +43,7 @@ func (s *GRPCUsers) GetUser(ctx context.Context, req *usersv1.GetUserDTO) (*user
 func (s *GRPCUsers) GetSubscribers(ctx context.Context, req *usersv1.GetSubscribersDTO) (*usersv1.GetSubscribersRDO, error) {
 	bloggerId, err := uuid.Parse(req.BloggerId)
 	if err != nil {
+		s.log.ErrorContext(ctx, "Failed to parse blogger uuid", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
@@ -47,6 +53,7 @@ func (s *GRPCUsers) GetSubscribers(ctx context.Context, req *usersv1.GetSubscrib
 		Size:      req.Size,
 	})
 	if err != nil {
+		s.log.ErrorContext(ctx, "Failed to get subscribers", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
@@ -59,6 +66,7 @@ func (s *GRPCUsers) GetSubscribers(ctx context.Context, req *usersv1.GetSubscrib
 func (s *GRPCUsers) GetSubscriptions(ctx context.Context, req *usersv1.GetSubscriptionsDTO) (*usersv1.GetSubscriptionsRDO, error) {
 	subscriberId, err := uuid.Parse(req.SubscriberId)
 	if err != nil {
+		s.log.ErrorContext(ctx, "Failed to parse subscriber uuid", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
@@ -68,6 +76,7 @@ func (s *GRPCUsers) GetSubscriptions(ctx context.Context, req *usersv1.GetSubscr
 		Size:         req.Size,
 	})
 	if err != nil {
+		s.log.ErrorContext(ctx, "Failed to get subscriptions", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
@@ -80,6 +89,7 @@ func (s *GRPCUsers) GetSubscriptions(ctx context.Context, req *usersv1.GetSubscr
 func (s *GRPCUsers) UpdateUser(ctx context.Context, req *usersv1.UpdateUserDTO) (*usersv1.UpdateUserRDO, error) {
 	userId, err := uuid.Parse(req.Id)
 	if err != nil {
+		s.log.ErrorContext(ctx, "Failed to parse user uuid", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
@@ -88,6 +98,7 @@ func (s *GRPCUsers) UpdateUser(ctx context.Context, req *usersv1.UpdateUserDTO) 
 		UpdateFields: services_transfer.ConvertUpdateFieldsInfoFromProto(req.UpdateData),
 	})
 	if err != nil {
+		s.log.ErrorContext(ctx, "Failed to update user", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
@@ -99,12 +110,14 @@ func (s *GRPCUsers) UpdateUser(ctx context.Context, req *usersv1.UpdateUserDTO) 
 func (s *GRPCUsers) DeleteUser(ctx context.Context, req *usersv1.DeleteUserDTO) (*usersv1.DeleteUserRDO, error) {
 	userId, err := uuid.Parse(req.Id)
 	if err != nil {
+		s.log.ErrorContext(ctx, "Failed to parse user uuid", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
 	if err := s.userService.DeleteUser(ctx, &services_transfer.DeleteUserInfo{
 		Id: userId,
 	}); err != nil {
+		s.log.ErrorContext(ctx, "Failed to delete user", logger.ErrKey, err.Error())
 		return &usersv1.DeleteUserRDO{
 			IsDeleted: false,
 		}, err
@@ -118,11 +131,13 @@ func (s *GRPCUsers) DeleteUser(ctx context.Context, req *usersv1.DeleteUserDTO) 
 func (s *GRPCUsers) Subscribe(ctx context.Context, req *usersv1.SubscribeDTO) (*usersv1.SubscribeRDO, error) {
 	bloggerId, err := uuid.Parse(req.BloggerId)
 	if err != nil {
+		s.log.ErrorContext(ctx, "Failed to parse blogger uuid", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
 	subscriberId, err := uuid.Parse(req.SubscriberId)
 	if err != nil {
+		s.log.ErrorContext(ctx, "Failed to parse subscriber uuid", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
@@ -130,6 +145,7 @@ func (s *GRPCUsers) Subscribe(ctx context.Context, req *usersv1.SubscribeDTO) (*
 		SubscriberId: subscriberId,
 		BloggerId:    bloggerId,
 	}); err != nil {
+		s.log.ErrorContext(ctx, "Failed to subscribe to blogger", logger.ErrKey, err.Error())
 		return &usersv1.SubscribeRDO{
 			IsSubscribe: false,
 		}, err
@@ -143,11 +159,13 @@ func (s *GRPCUsers) Subscribe(ctx context.Context, req *usersv1.SubscribeDTO) (*
 func (s *GRPCUsers) Unsubscribe(ctx context.Context, req *usersv1.SubscribeDTO) (*usersv1.SubscribeRDO, error) {
 	bloggerId, err := uuid.Parse(req.BloggerId)
 	if err != nil {
+		s.log.ErrorContext(ctx, "Failed to parse blogger uuid", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
 	subscriberId, err := uuid.Parse(req.SubscriberId)
 	if err != nil {
+		s.log.ErrorContext(ctx, "Failed to parse subscriber uuid", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
@@ -155,6 +173,7 @@ func (s *GRPCUsers) Unsubscribe(ctx context.Context, req *usersv1.SubscribeDTO) 
 		SubscriberId: subscriberId,
 		BloggerId:    bloggerId,
 	}); err != nil {
+		s.log.ErrorContext(ctx, "Failed to unsubscribe from blogger", logger.ErrKey, err.Error())
 		return &usersv1.SubscribeRDO{
 			IsSubscribe: false,
 		}, err
@@ -168,6 +187,7 @@ func (s *GRPCUsers) Unsubscribe(ctx context.Context, req *usersv1.SubscribeDTO) 
 func (s *GRPCUsers) UploadAvatar(ctx context.Context, req *usersv1.UploadAvatarDTO) (*usersv1.UploadAvatarRDO, error) {
 	userId, err := uuid.Parse(req.UserId)
 	if err != nil {
+		s.log.ErrorContext(ctx, "Failed to parse user uuid", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
@@ -176,6 +196,7 @@ func (s *GRPCUsers) UploadAvatar(ctx context.Context, req *usersv1.UploadAvatarD
 		Image:  req.Image,
 	})
 	if err != nil {
+		s.log.ErrorContext(ctx, "Failed to upload avatar", logger.ErrKey, err.Error())
 		return nil, err
 	}
 

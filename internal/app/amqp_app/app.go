@@ -5,6 +5,7 @@ import (
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient"
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient/rabbitmqclient"
 	"github.com/KBcHMFollower/blog_user_service/internal/config"
+	"log/slog"
 )
 
 type AmqpApp struct {
@@ -12,8 +13,8 @@ type AmqpApp struct {
 	handlers map[string]amqpclient.AmqpHandlerFunc
 }
 
-func NewAmqpApp(rabbitmqConnectInfo config.RabbitMq) (*AmqpApp, error) {
-	rabbitMqApp, err := rabbitmqclient.NewRabbitMQClient(rabbitmqConnectInfo.Addr)
+func NewAmqpApp(rabbitmqConnectInfo config.RabbitMq, log *slog.Logger) (*AmqpApp, error) {
+	rabbitMqApp, err := rabbitmqclient.NewRabbitMQClient(rabbitmqConnectInfo.Addr, log)
 	if err != nil {
 		return nil, fmt.Errorf("new rabbitmq Client error: %v", err)
 	}

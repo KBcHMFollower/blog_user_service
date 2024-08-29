@@ -2,8 +2,8 @@ package repository
 
 import (
 	"context"
-	"fmt"
 	"github.com/KBcHMFollower/blog_user_service/internal/database"
+	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
 	repositories_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
 	rep_utils "github.com/KBcHMFollower/blog_user_service/internal/repository/lib"
@@ -44,8 +44,6 @@ func NewEventRepository(dbDriver database.DBWrapper) *EventRepository {
 }
 
 func (r *EventRepository) GetEventsWithStatus(ctx context.Context, status MessageStatus, limit uint64) ([]*models.EventInfo, error) {
-	op := "UserRepository.getSubInfo"
-
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	query := builder.
@@ -56,20 +54,18 @@ func (r *EventRepository) GetEventsWithStatus(ctx context.Context, status Messag
 
 	toSql, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("%s : failed to generate sql query: %w", op, err)
+		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	eventInfos := make([]*models.EventInfo, 0)
 	if err := r.db.SelectContext(ctx, &eventInfos, toSql, args...); err != nil {
-		return nil, fmt.Errorf("%s : failed to execute query: %w", op, err)
+		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return eventInfos, nil
 }
 
 func (r *EventRepository) SetStatusInEvents(ctx context.Context, eventsId []uuid.UUID, status MessageStatus) error {
-	op := "UserRepository.getSubInfo"
-
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	query := builder.
@@ -79,19 +75,17 @@ func (r *EventRepository) SetStatusInEvents(ctx context.Context, eventsId []uuid
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("%s : failed to fetch events %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	if _, err = r.db.ExecContext(ctx, sql, args...); err != nil {
-		return fmt.Errorf("%s : failed to set events sent status: %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return nil
 }
 
 func (r *EventRepository) GetEventById(ctx context.Context, eventId uuid.UUID) (*models.EventInfo, error) {
-	op := "UserRepository.getEventById"
-
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	query := builder.
@@ -101,20 +95,18 @@ func (r *EventRepository) GetEventById(ctx context.Context, eventId uuid.UUID) (
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("%s : failed to generate sql query: %w", op, err)
+		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	var eventInfo models.EventInfo
 	if err := r.db.GetContext(ctx, &eventInfo, sql, args...); err != nil {
-		return nil, fmt.Errorf("%s : failed to execute query: %w", op, err)
+		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return &eventInfo, nil
 }
 
 func (r *EventRepository) Create(ctx context.Context, info repositories_transfer.CreateEventInfo, tx database.Transaction) error {
-	op := "UserRepository.create"
-
 	executor := rep_utils.GetExecutor(r.db, tx)
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
@@ -125,11 +117,11 @@ func (r *EventRepository) Create(ctx context.Context, info repositories_transfer
 
 	toSql, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("%s : failed to generate sql query: %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	if _, err := executor.ExecContext(ctx, toSql, args...); err != nil {
-		return fmt.Errorf("%s : failed to execute query: %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return nil

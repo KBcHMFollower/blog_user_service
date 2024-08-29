@@ -2,11 +2,15 @@ package interceptors
 
 import (
 	"context"
-	"fmt"
+	"github.com/KBcHMFollower/blog_user_service/internal/logger"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"log/slog"
 	"time"
+)
+
+const (
+	methodLogKey = "method"
 )
 
 func ReqLoggingInterceptor(log *slog.Logger) grpc.UnaryServerInterceptor {
@@ -18,20 +22,17 @@ func ReqLoggingInterceptor(log *slog.Logger) grpc.UnaryServerInterceptor {
 	) (interface{}, error) {
 		md, ok := metadata.FromIncomingContext(ctx)
 		if !ok {
-			log.Info("No metadata from incoming context")
+			log.InfoContext(ctx, "No metadata from incoming context")
 		}
 
-		var reqId string
-		ids, ok := md["req-id"]
+		reqId := getInfoFromMd(md, "req-id")
+		userId := getInfoFromMd(md, "user-id")
 
-		switch ok {
-		case true:
-			reqId = ids[0]
-		default:
-			reqId = "unknown"
-		}
+		logger.UpdateLoggerCtx(ctx, logger.ReqIdKey, reqId)
+		logger.UpdateLoggerCtx(ctx, logger.ReqUserKey, userId)
+		logger.UpdateLoggerCtx(ctx, methodLogKey, info.FullMethod)
 
-		log.Info(fmt.Sprintf("ReqID: %s; Method: %s; Starting execution", reqId, info.FullMethod))
+		log.InfoContext(ctx, "--Method starting execution--", "data", req)
 
 		startTime := time.Now()
 
@@ -39,8 +40,19 @@ func ReqLoggingInterceptor(log *slog.Logger) grpc.UnaryServerInterceptor {
 
 		duration := time.Since(startTime)
 
-		log.Info(fmt.Sprintf("ReqID: %s; Method: %s; Duration: %s; Error: %v", reqId, info.FullMethod, duration, err))
+		log.InfoContext(ctx, "--Method is executed--", "duration", duration, "err", err)
 
 		return resp, err
+	}
+}
+
+func getInfoFromMd(md metadata.MD, k string) string {
+	v, ok := md["req-id"]
+
+	switch ok {
+	case true:
+		return v[0]
+	default:
+		return "undefined"
 	}
 }

@@ -23,19 +23,17 @@ type App struct {
 	amqpApp    *amqp_app.AmqpApp
 	storeApp   *store_app.StoreApp
 	workersApp *workers_app.WorkersApp
+	log        *slog.Logger
+	cfg        *config.Config
 }
 
 func New(
-	log *slog.Logger,
 	cfg *config.Config,
+	log *slog.Logger,
 ) *App {
-	//op := "App.NewUserService"
-	//appLog := log.With(
-	//	slog.String("op", op))
-
 	storageApp, err := store_app.New(cfg.Storage, cfg.Redis, cfg.Minio)
 	lib.ContinueOrPanic(err)
-	rabbitMqApp, err := amqp_app.NewAmqpApp(cfg.RabbitMq)
+	rabbitMqApp, err := amqp_app.NewAmqpApp(cfg.RabbitMq, log)
 	lib.ContinueOrPanic(err)
 
 	eventRepository := repository.NewEventRepository(storageApp.PostgresStore.Store)
@@ -53,7 +51,7 @@ func New(
 	)
 	reqService := auth_service.NewRequestsService(reqRepository, log)
 
-	amqpUsersHandler := amqp_handlers.NewUserHandler(authService)
+	amqpUsersHandler := amqp_handlers.NewUserHandler(authService, log)
 
 	rabbitMqApp.RegisterHandler("posts-deleted-feedback", amqpUsersHandler.HandlePostDeletingEvent) //TODO: НА КОНСТАНТУ
 
@@ -73,6 +71,7 @@ func New(
 		amqpApp:    rabbitMqApp,
 		storeApp:   storageApp,
 		workersApp: workersApp,
+		log:        log,
 	}
 }
 

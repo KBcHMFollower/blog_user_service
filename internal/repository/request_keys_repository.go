@@ -4,8 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"github.com/KBcHMFollower/blog_user_service/internal/database"
+	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
 	repositories_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
 	rep_utils "github.com/KBcHMFollower/blog_user_service/internal/repository/lib"
@@ -36,8 +36,6 @@ func NewRequestsRepository(db database.DBWrapper) *RequestsRepository {
 }
 
 func (r *RequestsRepository) Create(ctx context.Context, info repositories_transfer.CreateRequestInfo, tx database.Transaction) error {
-	op := "RequestsRepository.create"
-
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	executor := rep_utils.GetExecutor(r.db, tx)
 
@@ -53,19 +51,17 @@ func (r *RequestsRepository) Create(ctx context.Context, info repositories_trans
 
 	toSql, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("%s : failed to generate sql query : %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	if _, err := executor.ExecContext(ctx, toSql, args...); err != nil {
-		return fmt.Errorf("%s : failed to execute query : %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return nil
 }
 
 func (r *RequestsRepository) Get(ctx context.Context, key uuid.UUID, tx database.Transaction) (*models.Request, error) {
-	op := "RequestsRepository.get"
-
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	executor := rep_utils.GetExecutor(r.db, tx)
 
@@ -83,7 +79,7 @@ func (r *RequestsRepository) Get(ctx context.Context, key uuid.UUID, tx database
 			return nil, nil
 		}
 
-		return nil, fmt.Errorf("%s : failed to execute query : %w", op, err)
+		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return &request, nil

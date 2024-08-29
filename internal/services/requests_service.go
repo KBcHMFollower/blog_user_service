@@ -2,7 +2,7 @@ package services
 
 import (
 	"context"
-	"github.com/KBcHMFollower/blog_user_service/internal/domain"
+	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
 	repositories_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	services_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
 	dep "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces/dep"
@@ -27,16 +27,9 @@ func NewRequestsService(reqRepository RequestsStore, log *slog.Logger) *Requests
 }
 
 func (rs *RequestsService) CheckAndCreate(ctx context.Context, checkInfo services_transfer.RequestsCheckExistsInfo) (bool, error) {
-	op := "RequestsService.CheckAndCreate"
-
-	log := rs.log.With(
-		slog.String("op", op),
-	)
-
 	res, err := rs.reqRepository.Get(ctx, checkInfo.Key, nil)
 	if err != nil {
-		log.Error(err.Error())
-		return false, domain.AddOpInErr(err, op)
+		return false, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("cant get request from repository", err))
 	}
 
 	if res != nil {
@@ -47,8 +40,7 @@ func (rs *RequestsService) CheckAndCreate(ctx context.Context, checkInfo service
 		Key: checkInfo.Key,
 	}, nil)
 	if err != nil {
-		log.Error(err.Error())
-		return false, domain.AddOpInErr(err, op)
+		return false, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("cant create request in repository", err))
 	}
 
 	return false, nil

@@ -3,7 +3,7 @@ package interceptors
 import (
 	"context"
 	"errors"
-	"github.com/KBcHMFollower/blog_user_service/internal/domain"
+	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -15,10 +15,10 @@ type ErrorsTransformer struct {
 
 func NewErrorsTransformer() *ErrorsTransformer {
 	return &ErrorsTransformer{errorMap: map[error]error{
-		domain.ErrBadRequest:   status.Error(codes.InvalidArgument, "bad request"),
-		domain.ErrUnauthorized: status.Error(codes.Unauthenticated, "unauthorized"),
-		domain.ErrNotFound:     status.Error(codes.NotFound, "not found"),
-		domain.ErrConflict:     status.Error(codes.AlreadyExists, "already exists"),
+		ctxerrors.ErrBadRequest:   status.Error(codes.InvalidArgument, "bad request"),
+		ctxerrors.ErrUnauthorized: status.Error(codes.Unauthenticated, "unauthorized"),
+		ctxerrors.ErrNotFound:     status.Error(codes.NotFound, "not found"),
+		ctxerrors.ErrConflict:     status.Error(codes.AlreadyExists, "already exists"),
 	}}
 }
 

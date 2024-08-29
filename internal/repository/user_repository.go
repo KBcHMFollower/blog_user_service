@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/cashe"
 	"github.com/KBcHMFollower/blog_user_service/internal/database"
+	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
 	transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	rep_utils "github.com/KBcHMFollower/blog_user_service/internal/repository/lib"
 	"time"
@@ -33,8 +34,6 @@ func NewUserRepository(dbDriver database.DBWrapper, cacheStorage cashe.CasheStor
 }
 
 func (r *UserRepository) getSubInfo(ctx context.Context, getInfo transfer.GetSubscriptionInfo) ([]*models.Subscriber, uint32, error) {
-	op := "UserRepository.getSubInfo"
-
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	offset := (getInfo.Page - 1) * getInfo.Size
@@ -48,12 +47,12 @@ func (r *UserRepository) getSubInfo(ctx context.Context, getInfo transfer.GetSub
 
 	toSql, args, err := query.ToSql()
 	if err != nil {
-		return nil, 0, fmt.Errorf("%s : failed to build sql query : %w", op, err)
+		return nil, 0, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	subscribers := make([]*models.Subscriber, 0)
 	if err := r.db.SelectContext(ctx, &subscribers, toSql, args...); err != nil {
-		return nil, 0, fmt.Errorf("%s : failed to execute sql : %w", op, err)
+		return nil, 0, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	query = builder.
@@ -63,20 +62,18 @@ func (r *UserRepository) getSubInfo(ctx context.Context, getInfo transfer.GetSub
 
 	toSql, args, err = query.ToSql()
 	if err != nil {
-		return subscribers, 0, fmt.Errorf("%s : failed to build sql query : %w", op, err)
+		return subscribers, 0, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	var totalCount uint32
 	if err := r.db.GetContext(ctx, &totalCount, toSql, args...); err != nil {
-		return nil, 0, fmt.Errorf("%s : failed to execute sql : %w", op, err)
+		return nil, 0, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return subscribers, totalCount, nil
 }
 
 func (r *UserRepository) CreateUser(ctx context.Context, createDto *transfer.CreateUserInfo) (uuid.UUID, error) {
-	op := "UserRepository.CreateUser"
-
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	user := models.NewUserModel(createDto.Email, createDto.FName, createDto.LName, createDto.HashPass)
@@ -95,20 +92,18 @@ func (r *UserRepository) CreateUser(ctx context.Context, createDto *transfer.Cre
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("%s : failed to build sql query : %w", op, err)
+		return uuid.Nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	var id uuid.UUID
 	if err := r.db.GetContext(ctx, &id, sql, args...); err != nil {
-		return uuid.Nil, fmt.Errorf("%s : failed to execute sql : %w", op, err)
+		return uuid.Nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return id, nil
 }
 
 func (r *UserRepository) RollBackUser(ctx context.Context, user models.User) error {
-	op := "UserRepository.RollBackUser"
-
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	query := builder.Insert(UsersTable).
@@ -127,19 +122,18 @@ func (r *UserRepository) RollBackUser(ctx context.Context, user models.User) err
 
 	toSql, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("%s : failed to build toSql query : %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	var id uuid.UUID
 	if err := r.db.GetContext(ctx, &id, toSql, args...); err != nil {
-		return fmt.Errorf("%s : failed to execute sql : %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return nil
 }
 
 func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
-	op := "UserRepository.GetUserByEmail"
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	sql, args, err := builder.Select("*").
@@ -147,20 +141,18 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 		Where(squirrel.Eq{"email": email}).
 		ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("%s : failed to build sql query : %w", op, err)
+		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	var user models.User
 	if err := r.db.GetContext(ctx, &user, sql, args...); err != nil {
-		return nil, fmt.Errorf("%s : failed to execute sql : %w", op, err)
+		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return &user, nil
 }
 
 func (r *UserRepository) GetUserById(ctx context.Context, userId uuid.UUID, tx database.Transaction) (*models.User, error) {
-	op := "UserRepository.GetUserById"
-
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	executor := rep_utils.GetExecutor(r.db, tx)
 
@@ -169,12 +161,12 @@ func (r *UserRepository) GetUserById(ctx context.Context, userId uuid.UUID, tx d
 		Where(squirrel.Eq{"id": userId}).
 		ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("%s : failed to build sql query : %w", op, err)
+		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	var user models.User
 	if err := executor.GetContext(ctx, &user, sql, args...); err != nil {
-		return nil, fmt.Errorf("%s : failed to execute sql : %w", op, err)
+		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return &user, nil
@@ -205,20 +197,18 @@ func (r *UserRepository) GetUserSubscribers(ctx context.Context, getInfo transfe
 		Where(squirrel.Eq{"id": subscribersId}).
 		ToSql()
 	if err != nil {
-		return nil, totalCount, fmt.Errorf("%s : failed to build sql query : %w", op, err)
+		return nil, totalCount, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	users := make([]*models.User, 0)
 	if err := r.db.SelectContext(ctx, &users, sql, args...); err != nil {
-		return nil, totalCount, fmt.Errorf("%s : failed to execute sql : %w", op, err)
+		return nil, totalCount, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return users, totalCount, nil
 }
 
 func (r *UserRepository) GetUserSubscriptions(ctx context.Context, getInfo transfer.GetUserSubscriptionsInfo) ([]*models.User, uint32, error) {
-	op := "UserRepository.GetUserSubscribers"
-
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	subscribers, totalCount, err := r.getSubInfo(ctx, transfer.GetSubscriptionInfo{
@@ -228,7 +218,7 @@ func (r *UserRepository) GetUserSubscriptions(ctx context.Context, getInfo trans
 		TargetType: "subscriber_id",
 	})
 	if err != nil {
-		return nil, totalCount, fmt.Errorf("%s : failed to get sub info : %w", op, err)
+		return nil, totalCount, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	subscribersId := make([]uuid.UUID, 0)
@@ -243,14 +233,13 @@ func (r *UserRepository) GetUserSubscriptions(ctx context.Context, getInfo trans
 
 	users := make([]*models.User, 0)
 	if err := r.db.SelectContext(ctx, &users, sql, args...); err != nil {
-		return nil, totalCount, fmt.Errorf("%s : failed to execute sql : %w", op, err)
+		return nil, totalCount, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return users, totalCount, nil
 }
 
 func (r *UserRepository) UpdateUser(ctx context.Context, updateData transfer.UpdateUserInfo, tx database.Transaction) error { //TODO
-	op := "UserRepository.UpdateUser"
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	executor := rep_utils.GetExecutor(r.db, tx)
 
@@ -268,19 +257,18 @@ func (r *UserRepository) UpdateUser(ctx context.Context, updateData transfer.Upd
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("%s : failed to build sql query : %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	_, err = executor.ExecContext(ctx, sql, args...)
 	if err != nil {
-		return fmt.Errorf("%s : failed to execute sql : %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return nil
 }
 
 func (r *UserRepository) Subscribe(ctx context.Context, subInfo transfer.SubscribeToUserInfo) error {
-	op := "UserRepository.Subscribe"
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	subscribers := models.NewSubscriber(subInfo.BloggerId, subInfo.SubscriberId)
@@ -294,19 +282,18 @@ func (r *UserRepository) Subscribe(ctx context.Context, subInfo transfer.Subscri
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("%s : failed to build sql query : %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	_, err = r.db.ExecContext(ctx, sql, args...)
 	if err != nil {
-		return fmt.Errorf("%s : failed to execute sql : %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return nil
 }
 
 func (r *UserRepository) Unsubscribe(ctx context.Context, unsubInfo transfer.UnsubscribeInfo) error {
-	op := "UserRepository.Unsubscribe"
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	query := builder.Delete(SubscribersTable).
@@ -314,31 +301,29 @@ func (r *UserRepository) Unsubscribe(ctx context.Context, unsubInfo transfer.Uns
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("%s : failed to build sql query : %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	_, err = r.db.ExecContext(ctx, sql, args...)
 	if err != nil {
-		return fmt.Errorf("%s : failed to execute sql : %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return nil
 }
 
 func (r *UserRepository) DeleteUser(ctx context.Context, delInfo transfer.DeleteUserInfo, tx database.Transaction) error {
-	op := "UserRepository.DeleteUser"
-
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	executor := rep_utils.GetExecutor(r.db, tx)
 
 	query := builder.Delete(UsersTable).Where(squirrel.Eq{"id": delInfo.Id})
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("%s : failed to build sql query : %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
 	}
 
 	if _, err := executor.ExecContext(ctx, sql, args...); err != nil {
-		return fmt.Errorf("%s : failed to execute sql : %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
 	}
 
 	return nil
@@ -346,44 +331,38 @@ func (r *UserRepository) DeleteUser(ctx context.Context, delInfo transfer.Delete
 
 // TODO: ДОЛЖНО ВЫЗЫВАТЬСЯ ИЗ СЕРВИСА
 func (r *UserRepository) TryGetUserFromCache(ctx context.Context, id uuid.UUID) (*models.User, error) {
-	op := "UserRepository.TryGetUserFromCache"
-
 	data, err := r.cache.Get(ctx, fmt.Sprintf("%s%s", UsersCachePref, id.String()))
 	if err != nil {
-		return nil, fmt.Errorf("%s : failed to read from cache : %w", op, err)
+		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("failed to read from cache", err))
 	}
 
 	var user *models.User
 
 	if err := json.Unmarshal([]byte(data), &user); err != nil {
-		return nil, fmt.Errorf("%s : failed to unmarshal json : %w", op, err)
+		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("failed to unmarshal data", err))
 	}
 
 	return user, nil
 }
 
 func (r *UserRepository) SetUserToCache(ctx context.Context, user *models.User) error {
-	op := "UserRepository.SetUserToCache"
-
 	userJson, err := json.Marshal(user)
 	if err != nil {
-		return fmt.Errorf("%s : failed to marshal json : %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("failed to unmarshal data", err))
 	}
 
 	err = r.cache.Set(ctx, fmt.Sprintf("%s%s", UsersCachePref, user.Id.String()), userJson)
 	if err != nil {
-		return fmt.Errorf("%s : failed to write to cache : %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("failed to write to cache", err))
 	}
 
 	return nil
 }
 
 func (r *UserRepository) DeleteUserFromCache(ctx context.Context, id uuid.UUID) error {
-	op := "UserRepository.DeleteUserFromCache"
-
 	err := r.cache.Delete(ctx, fmt.Sprintf("%s%s", UsersCachePref, id.String()))
 	if err != nil {
-		return fmt.Errorf("%s : failed to delete from cache : %w", op, err)
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("failed to delete from cache", err))
 	}
 
 	return nil
