@@ -9,17 +9,17 @@ import (
 	"log/slog"
 )
 
-type RequestsStore interface {
+type requestsStore interface {
 	dep.RequestsCreator
 	dep.RequestsGetter
 }
 
 type RequestsService struct {
-	reqRepository RequestsStore
+	reqRepository requestsStore
 	log           *slog.Logger
 }
 
-func NewRequestsService(reqRepository RequestsStore, log *slog.Logger) *RequestsService {
+func NewRequestsService(reqRepository requestsStore, log *slog.Logger) *RequestsService {
 	return &RequestsService{
 		reqRepository: reqRepository,
 		log:           log,

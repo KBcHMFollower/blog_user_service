@@ -11,7 +11,6 @@ import (
 	repositories_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
-	tokens_helper "github.com/KBcHMFollower/blog_user_service/internal/lib/tokens"
 	"github.com/KBcHMFollower/blog_user_service/internal/logger"
 	dep "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces/dep"
 	services_utils "github.com/KBcHMFollower/blog_user_service/internal/services/lib"
@@ -20,7 +19,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -32,143 +30,45 @@ const (
 	avatarUruLogKey     = "avatar-uru"
 )
 
-type EventStore interface {
+type eventStore interface {
 	dep.EventCreator
 	dep.EventGetter
 }
 
-type ImageStore interface {
+type imageStore interface {
 	dep.ImageGetter
 	dep.ImageUploader
 }
 
-type UserStore interface {
+type usersStore interface {
 	dep.UserDeleter
 	dep.UserGetter
 	dep.UserUpdater
-	dep.SubscribeManager
 	dep.UserCreator
 }
 
+type SubscribersStore interface {
+	dep.SubscribersGetter
+	dep.SubscribersDealer
+}
+
 type UserService struct {
-	log         *slog.Logger
-	tokenTtl    time.Duration
-	tokenSecret string
-	userRep     UserStore
-	eventsRep   EventStore
-	txCreator   dep.TransactionCreator
-	imgStore    ImageStore
+	log       *slog.Logger
+	userRep   usersStore
+	eventsRep eventStore
+	subsRep   SubscribersStore
+	txCreator dep.TransactionCreator
+	imgStore  imageStore
 }
 
-func NewUserService(log *slog.Logger, tokenTtl time.Duration, tokenSecret string, txCreator dep.TransactionCreator, userRep UserStore, eventsRep EventStore, imgStore ImageStore) *UserService {
+func NewUserService(log *slog.Logger, txCreator dep.TransactionCreator, userRep usersStore, eventsRep eventStore, imgStore imageStore) *UserService {
 	return &UserService{
-		log:         log,
-		tokenTtl:    tokenTtl,
-		tokenSecret: tokenSecret,
-		userRep:     userRep,
-		imgStore:    imgStore,
-		txCreator:   txCreator,
-		eventsRep:   eventsRep,
+		log:       log,
+		userRep:   userRep,
+		imgStore:  imgStore,
+		txCreator: txCreator,
+		eventsRep: eventsRep,
 	}
-}
-
-// TODO: fname и lname не работают, должна быть транзакция
-func (a *UserService) RegisterUser(ctx context.Context, req *transfer.RegisterInfo) (*transfer.TokenResult, error) {
-	logger.UpdateLoggerCtx(ctx, logger.ActionEmailKey, req.Email)
-
-	a.log.InfoContext(ctx, "trying to register user")
-
-	hashPass, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t generate hashPass", err))
-	}
-
-	a.log.Debug("hash pass is generated successfully")
-
-	userId, err := a.userRep.CreateUser(ctx, &repositories_transfer.CreateUserInfo{
-		Email:    req.Email,
-		FName:    req.FName,
-		LName:    req.LName,
-		HashPass: hashPass,
-	})
-	if err != nil {
-		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t create user in db", err))
-	}
-
-	logger.UpdateLoggerCtx(ctx, createdUserIdLogKey, userId)
-	a.log.Debug("user created in db successfully")
-
-	token, err := tokens_helper.CreateNewJwt(userId, req.Email, a.tokenTtl, a.tokenSecret)
-	if err != nil {
-		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t create new jwt", err))
-	}
-
-	logger.UpdateLoggerCtx(ctx, accessTokenLogKey, token)
-	a.log.Debug("token created successfully")
-
-	a.log.InfoContext(ctx, "user registered successfully")
-
-	return &transfer.TokenResult{
-		AccessToken: token,
-	}, nil
-}
-
-func (a *UserService) LoginUser(ctx context.Context, loginInfo *transfer.LoginInfo) (*transfer.TokenResult, error) {
-	logger.UpdateLoggerCtx(ctx, logger.ActionEmailKey, loginInfo.Email)
-
-	a.log.InfoContext(ctx, "user try to login")
-
-	user, err := a.userRep.GetUserByEmail(ctx, loginInfo.Email)
-	if err != nil {
-		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t get user from db", err))
-	}
-
-	logger.UpdateLoggerCtx(ctx, logger.ActionUserIdKey, user.Id)
-	a.log.Debug("email is exists")
-
-	err = bcrypt.CompareHashAndPassword(user.PassHash, []byte(loginInfo.Password))
-	if err != nil {
-		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("passwords not eq", err))
-	}
-
-	a.log.Debug("password is correct")
-
-	token, err := tokens_helper.CreateNewJwt(user.Id, user.Email, a.tokenTtl, a.tokenSecret)
-	if err != nil {
-		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t generate jwt", err))
-	}
-
-	a.log.Debug("token created successfully", "as-token", token)
-	a.log.InfoContext(ctx, "user logged in successfully")
-
-	return &transfer.TokenResult{
-		AccessToken: token,
-	}, nil
-}
-
-func (a *UserService) CheckAuth(ctx context.Context, authInfo *transfer.CheckAuthInfo) (*transfer.TokenResult, error) {
-	parsedToken, err := tokens_helper.Parse(authInfo.AccessToken, a.tokenSecret)
-
-	if err != nil {
-		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t parse token", err))
-	}
-	if !parsedToken.Valid {
-		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("token is invalid", err))
-	}
-
-	tokenClaims, err := tokens_helper.GetClaimsValues(parsedToken)
-	if err != nil {
-		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t  parse jwt claims", err))
-	}
-
-	newToken, err := tokens_helper.CreateNewJwt(tokenClaims.Id, tokenClaims.Email, a.tokenTtl, a.tokenSecret)
-	if err != nil {
-		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t create jwt", err))
-	}
-
-	return &transfer.TokenResult{
-		AccessToken: newToken,
-	}, nil
 }
 
 func (a *UserService) GetUserById(ctx context.Context, userId uuid.UUID) (ersUser *transfer.GetUserResult, resErr error) {
@@ -184,7 +84,7 @@ func (a *UserService) GetUserById(ctx context.Context, userId uuid.UUID) (ersUse
 		resErr = services_utils.HandleErrInTransaction(resErr, tx)
 	}()
 
-	cacheUser, err := a.userRep.TryGetUserFromCache(ctx, userId)
+	cacheUser, err := a.userRep.TryGetFromCache(ctx, userId)
 	if err != nil {
 		a.log.Debug("can`t get cacheUser from cache: ", "err", err.Error())
 	}
@@ -197,14 +97,17 @@ func (a *UserService) GetUserById(ctx context.Context, userId uuid.UUID) (ersUse
 
 	a.log.Debug("try to get user by id from db")
 
-	user, err := a.userRep.GetUserById(ctx, userId, tx)
+	user, err := a.userRep.User(ctx, repositories_transfer.GetUserInfo{
+		Target: repositories_transfer.UserIdCondition,
+		Value:  userId,
+	}, nil)
 	if err != nil {
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t get cacheUser from db", err))
 	}
 
 	a.log.Debug("user found in db")
 
-	if err := a.userRep.SetUserToCache(ctx, user); err != nil {
+	if err := a.userRep.SetToCache(ctx, user); err != nil {
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t set cacheUser to db", err))
 	}
 	a.log.Debug("user added to cache")
@@ -217,47 +120,6 @@ func (a *UserService) GetUserById(ctx context.Context, userId uuid.UUID) (ersUse
 
 	return &transfer.GetUserResult{
 		User: transfer.GetUserResultFromModel(user),
-	}, nil
-}
-
-func (a *UserService) GetSubscribers(ctx context.Context, getInfo *transfer.GetSubscribersInfo) (*transfer.GetSubscribersResult, error) {
-	logger.UpdateLoggerCtx(ctx, bloggerIdLogKey, getInfo.BloggerId)
-
-	a.log.Debug("try to get subscribers")
-
-	users, totalCount, err := a.userRep.GetUserSubscribers(ctx, repositories_transfer.GetUserSubscribersInfo{
-		UserId: getInfo.BloggerId,
-		Page:   uint64(getInfo.Page),
-		Size:   uint64(getInfo.Size)})
-	if err != nil {
-		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t get user subscribers from db", err))
-	}
-
-	a.log.Debug("subscribers found in db")
-
-	return &transfer.GetSubscribersResult{
-		Subscribers: transfer.GetSubscribersArrayResultFromModel(users),
-		TotalCount:  int32(totalCount),
-	}, nil
-}
-
-func (a *UserService) GetSubscriptions(ctx context.Context, getInfo *transfer.GetSubscriptionsInfo) (*transfer.GetSubscriptionsResult, error) {
-	a.log.Debug("try to get subscriptions")
-
-	users, totalCount, err := a.userRep.GetUserSubscriptions(ctx, repositories_transfer.GetUserSubscriptionsInfo{
-		UserId: getInfo.SubscriberId,
-		Page:   uint64(getInfo.Page),
-		Size:   uint64(getInfo.Size),
-	})
-	if err != nil {
-		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t get user subscriptions from db", err))
-	}
-
-	a.log.Debug("subscribers found in db")
-
-	return &transfer.GetSubscriptionsResult{
-		Subscriptions: transfer.GetSubscribersArrayResultFromModel(users),
-		TotalCount:    int32(totalCount),
 	}, nil
 }
 
@@ -283,14 +145,17 @@ func (a *UserService) UpdateUser(ctx context.Context, updateInfo *transfer.Updat
 		})
 	}
 
-	if err := a.userRep.UpdateUser(ctx, repositories_transfer.UpdateUserInfo{
+	if err := a.userRep.Update(ctx, repositories_transfer.UpdateUserInfo{
 		Id:         updateInfo.Id,
 		UpdateInfo: updateItems,
 	}, tx); err != nil {
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t update user in db", err))
 	}
 
-	exUser, exErr := a.userRep.GetUserById(ctx, updateInfo.Id, tx)
+	exUser, exErr := a.userRep.User(ctx, repositories_transfer.GetUserInfo{
+		Target: repositories_transfer.UserIdCondition,
+		Value:  updateInfo.Id,
+	}, tx)
 	if exErr != nil {
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t get user from db", err))
 	}
@@ -310,44 +175,6 @@ func (a *UserService) UpdateUser(ctx context.Context, updateInfo *transfer.Updat
 	}, nil
 }
 
-func (a *UserService) Subscribe(ctx context.Context, subInfo *transfer.SubscribeInfo) error {
-	logger.UpdateLoggerCtx(ctx, subscriberIdLogKey, subInfo.SubscriberId)
-	logger.UpdateLoggerCtx(ctx, bloggerIdLogKey, subInfo.BloggerId)
-
-	a.log.InfoContext(ctx, "try to subscribe to blogger")
-
-	err := a.userRep.Subscribe(ctx, repositories_transfer.SubscribeToUserInfo{
-		BloggerId:    subInfo.BloggerId,
-		SubscriberId: subInfo.SubscriberId,
-	})
-	if err != nil {
-		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t` `Subscribe`", err))
-	}
-
-	a.log.InfoContext(ctx, "subscribed to blogger")
-
-	return nil
-}
-
-func (a *UserService) Unsubscribe(ctx context.Context, subInfo *transfer.SubscribeInfo) error {
-	logger.UpdateLoggerCtx(ctx, subscriberIdLogKey, subInfo.SubscriberId)
-	logger.UpdateLoggerCtx(ctx, bloggerIdLogKey, subInfo.BloggerId)
-
-	a.log.InfoContext(ctx, "try to unsubscribe from blogger")
-
-	err := a.userRep.Unsubscribe(ctx, repositories_transfer.UnsubscribeInfo{
-		BloggerId:    subInfo.BloggerId,
-		SubscriberId: subInfo.SubscriberId,
-	})
-	if err != nil {
-		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t` `Unsubscribe`", err))
-	}
-
-	a.log.InfoContext(ctx, "unsubscribed from blogger")
-
-	return nil
-}
-
 func (a *UserService) DeleteUser(ctx context.Context, deleteInfo *transfer.DeleteUserInfo) (resErr error) {
 	logger.UpdateLoggerCtx(ctx, logger.ActionUserIdKey, deleteInfo.Id)
 
@@ -361,7 +188,10 @@ func (a *UserService) DeleteUser(ctx context.Context, deleteInfo *transfer.Delet
 		resErr = services_utils.HandleErrInTransaction(resErr, tx)
 	}()
 
-	user, err := a.userRep.GetUserById(ctx, deleteInfo.Id, tx)
+	user, err := a.userRep.User(ctx, repositories_transfer.GetUserInfo{
+		Target: repositories_transfer.UserIdCondition,
+		Value:  deleteInfo.Id,
+	}, tx)
 	if err != nil {
 		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t` `GetUser`", err))
 	}
@@ -443,7 +273,7 @@ func (a *UserService) UploadAvatar(ctx context.Context, uploadInfo *transfer.Upl
 	a.log.Debug("avatar is uploaded successfully")
 
 	//TODO
-	err = a.userRep.UpdateUser(ctx, repositories_transfer.UpdateUserInfo{
+	err = a.userRep.Update(ctx, repositories_transfer.UpdateUserInfo{
 		Id: uploadInfo.UserId,
 		UpdateInfo: []*repositories_transfer.UserFieldInfo{
 			{
@@ -484,7 +314,7 @@ func (a *UserService) CompensateDeletedUser(ctx context.Context, eventId uuid.UU
 
 	a.log.InfoContext(ctx, "trying to compensate user")
 
-	eventInfo, err := a.eventsRep.GetEventById(ctx, eventId)
+	eventInfo, err := a.eventsRep.Event(ctx, eventId)
 	if err != nil {
 		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t` `GetEvent`", err))
 	}

@@ -14,6 +14,10 @@ import (
 )
 
 const (
+	requestsTable = "request_keys"
+)
+
+const (
 	rKeysIdCol             = "id"
 	rKeysIdempotencyKeyCol = "idempotency_key"
 	rKeysPayloadCol        = "payload"
@@ -45,7 +49,7 @@ func (r *RequestsRepository) Create(ctx context.Context, info repositories_trans
 	}
 
 	query := builder.
-		Insert(database.RequestKeysTable).
+		Insert(requestsTable).
 		Columns(rKeysIdCol, rKeysIdempotencyKeyCol).
 		Values(request.Id, request.IdempotencyKey)
 
@@ -67,7 +71,7 @@ func (r *RequestsRepository) Get(ctx context.Context, key uuid.UUID, tx database
 
 	query := builder.
 		Select(rKeysAllCol).
-		From(database.RequestKeysTable).
+		From(requestsTable).
 		Where(squirrel.Eq{rKeysIdempotencyKeyCol: key})
 
 	toSql, args, _ := query.ToSql()

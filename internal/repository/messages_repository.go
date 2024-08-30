@@ -16,8 +16,6 @@ const (
 	messagesTable = "amqp_messages"
 )
 
-type MessageStatus string
-
 const (
 	MessagesStatusCol    = "status"
 	messagesEventIdCol   = "event_id"
@@ -26,27 +24,20 @@ const (
 	messagesPayloadCol   = "payload"
 )
 
-const (
-	MessagesSentStatus    MessageStatus = "sent"
-	MessagesErrorStatus   MessageStatus = "error"
-	MessagesWaitingStatus MessageStatus = "waiting"
-)
-
 type EventFilter struct {
 }
 
 type EventRepository struct {
-	db database.DBWrapper
+	db       database.DBWrapper
+	qBuilder squirrel.StatementBuilderType
 }
 
 func NewEventRepository(dbDriver database.DBWrapper) *EventRepository {
-	return &EventRepository{db: dbDriver}
+	return &EventRepository{db: dbDriver, qBuilder: squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)}
 }
 
-func (r *EventRepository) GetEventsWithStatus(ctx context.Context, status MessageStatus, limit uint64) ([]*models.EventInfo, error) {
-	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-
-	query := builder.
+func (r *EventRepository) EventsWithStatus(ctx context.Context, status repositories_transfer.MessageStatus, limit uint64) ([]*models.EventInfo, error) {
+	query := r.qBuilder.
 		Select(messagesAllCol).
 		From(messagesTable).
 		Where(squirrel.Eq{MessagesStatusCol: status}).
@@ -65,10 +56,8 @@ func (r *EventRepository) GetEventsWithStatus(ctx context.Context, status Messag
 	return eventInfos, nil
 }
 
-func (r *EventRepository) SetStatusInEvents(ctx context.Context, eventsId []uuid.UUID, status MessageStatus) error {
-	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-
-	query := builder.
+func (r *EventRepository) SetStatuses(ctx context.Context, eventsId []uuid.UUID, status repositories_transfer.MessageStatus) error {
+	query := r.qBuilder.
 		Update(messagesTable).
 		Where(squirrel.Eq{messagesEventIdCol: eventsId}).
 		Set(MessagesStatusCol, status)
@@ -85,10 +74,8 @@ func (r *EventRepository) SetStatusInEvents(ctx context.Context, eventsId []uuid
 	return nil
 }
 
-func (r *EventRepository) GetEventById(ctx context.Context, eventId uuid.UUID) (*models.EventInfo, error) {
-	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-
-	query := builder.
+func (r *EventRepository) Event(ctx context.Context, eventId uuid.UUID) (*models.EventInfo, error) {
+	query := r.qBuilder.
 		Select(messagesAllCol).
 		From(messagesTable).
 		Where(squirrel.Eq{messagesEventIdCol: eventId})
@@ -108,9 +95,8 @@ func (r *EventRepository) GetEventById(ctx context.Context, eventId uuid.UUID) (
 
 func (r *EventRepository) Create(ctx context.Context, info repositories_transfer.CreateEventInfo, tx database.Transaction) error {
 	executor := rep_utils.GetExecutor(r.db, tx)
-	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
-	query := builder.
+	query := r.qBuilder.
 		Insert(messagesTable).
 		Columns(messagesEventIdCol, messagesEventTypeCol, messagesPayloadCol).
 		Values(info.EventId, info.EventType, info.Payload) //TODO: ВОЗМОЖНО СТОИТ С ЭТИМ ЧТО-ТО ПРИДУМАТЬ, ПОТОМУ ЧТО СЕЙЧАТ, ЕСЛИ МЕНЯЕТСЯ МОДЕЛЬ, ПРИЙДЕТСЯ ИДТИ СЮДА И МЕНЯТЬ, ПОПРОБУЮ МАПУ

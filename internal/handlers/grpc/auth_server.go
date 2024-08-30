@@ -12,16 +12,16 @@ import (
 
 type GRPCAuth struct {
 	authv1.UnimplementedAuthServer
-	authService services_interfaces.UserService
+	authService services_interfaces.AuthService
 	log         *slog.Logger
 }
 
-func RegisterAuthServer(gRPC *grpc.Server, authService services_interfaces.UserService, log *slog.Logger) {
+func RegisterAuthServer(gRPC *grpc.Server, authService services_interfaces.AuthService, log *slog.Logger) {
 	authv1.RegisterAuthServer(gRPC, &GRPCAuth{authService: authService, log: log})
 }
 
 func (s *GRPCAuth) Login(ctx context.Context, req *authv1.LoginDTO) (*authv1.LoginRTO, error) {
-	token, err := s.authService.LoginUser(ctx, &services_transfer.LoginInfo{
+	token, err := s.authService.Login(ctx, &services_transfer.LoginInfo{
 		Email:    req.Email,
 		Password: req.Password,
 	})
@@ -36,7 +36,7 @@ func (s *GRPCAuth) Login(ctx context.Context, req *authv1.LoginDTO) (*authv1.Log
 }
 
 func (s *GRPCAuth) Register(ctx context.Context, req *authv1.RegisterDTO) (*authv1.RegisterRTO, error) {
-	token, err := s.authService.RegisterUser(ctx, &services_transfer.RegisterInfo{
+	token, err := s.authService.Register(ctx, &services_transfer.RegisterInfo{
 		Email:    req.Email,
 		Password: req.Password,
 	})

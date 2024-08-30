@@ -17,7 +17,10 @@ const (
 	UserPostsDeletedQueue = amqpclient.PostsDeletedEventKey
 )
 
-const ()
+const (
+	queueLogKey   = "queue"
+	messageLogKey = "message"
+)
 
 type RabbitMQClient struct {
 	pubConn        *amqp.Connection
@@ -110,12 +113,12 @@ func (rc *RabbitMQClient) Consume(queueName string, handler amqpclient.AmqpHandl
 		return ctxerrors.WrapCtx(rc.ctx, ctxerrors.Wrap(fmt.Sprintf("failed to register a consumer for queue %s", queueName), err))
 	}
 
-	rc.log.InfoContext(rc.ctx, "start consuming messages", "queue", queueName)
+	rc.log.InfoContext(rc.ctx, "start consuming messages", queueLogKey, queueName)
 
 	go func() {
 
 		ctx, cancel := context.WithCancel(rc.ctx)
-		logger.UpdateLoggerCtx(ctx, "queue", queueName)
+		logger.UpdateLoggerCtx(ctx, queueLogKey, queueName)
 
 		for d := range del {
 			select {
@@ -124,7 +127,7 @@ func (rc *RabbitMQClient) Consume(queueName string, handler amqpclient.AmqpHandl
 				return
 			default:
 
-				rc.log.InfoContext(ctx, "received a message", "message", string(d.Body))
+				rc.log.InfoContext(ctx, "received a message", messageLogKey, string(d.Body))
 				if err := handler(ctx, d.Body); err != nil {
 					rc.log.ErrorContext(ctx, "failed to handle a message from queue", logger.ErrKey, err.Error())
 					if err := d.Nack(false, false); err != nil {

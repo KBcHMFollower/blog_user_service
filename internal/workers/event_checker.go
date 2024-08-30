@@ -3,8 +3,8 @@ package workers
 import (
 	"context"
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient"
+	repositories_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	"github.com/KBcHMFollower/blog_user_service/internal/logger"
-	"github.com/KBcHMFollower/blog_user_service/internal/repository"
 	dep "github.com/KBcHMFollower/blog_user_service/internal/workers/interfaces/dep"
 	"github.com/google/uuid"
 	"log/slog"
@@ -48,7 +48,7 @@ func (as *EventChecker) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return
 			default:
-				events, err := as.eventRep.GetEventsWithStatus(ctx, repository.MessagesWaitingStatus, 50)
+				events, err := as.eventRep.EventsWithStatus(ctx, repositories_transfer.MessagesWaitingStatus, 50)
 				if err != nil {
 					as.logger.Warn("can`t get events from  db: ", "err", err.Error())
 					time.Sleep(5 * time.Second)
@@ -74,14 +74,14 @@ func (as *EventChecker) Run(ctx context.Context) error {
 					as.logger.Info("event published")
 				}
 
-				err = as.eventRep.SetStatusInEvents(ctx, rejectedList, repository.MessagesErrorStatus)
+				err = as.eventRep.SetStatuses(ctx, rejectedList, repositories_transfer.MessagesErrorStatus)
 				if err != nil {
 					as.logger.Error("can`t set status in events: ", "err", err.Error())
 					time.Sleep(5 * time.Second)
 					continue
 				}
 
-				err = as.eventRep.SetStatusInEvents(ctx, sentList, repository.MessagesSentStatus)
+				err = as.eventRep.SetStatuses(ctx, sentList, repositories_transfer.MessagesSentStatus)
 				if err != nil {
 					as.logger.Error("can`t set status in events: ", "err", err.Error())
 					time.Sleep(5 * time.Second)

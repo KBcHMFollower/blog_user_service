@@ -2,6 +2,18 @@ package repositories_transfer
 
 import "github.com/google/uuid"
 
+type UserFieldTarget string
+
+const (
+	UserIdCondition    UserFieldTarget = "id"
+	UserEmailCondition UserFieldTarget = "email"
+)
+
+type GetUserInfo struct {
+	Target UserFieldTarget
+	Value  interface{}
+}
+
 type UserFieldInfo struct {
 	Name  string
 	Value string

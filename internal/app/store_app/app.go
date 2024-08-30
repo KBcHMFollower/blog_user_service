@@ -8,6 +8,7 @@ import (
 	s3client "github.com/KBcHMFollower/blog_user_service/internal/clients/s3"
 	"github.com/KBcHMFollower/blog_user_service/internal/config"
 	"github.com/KBcHMFollower/blog_user_service/internal/database"
+	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"log"
@@ -28,18 +29,18 @@ type StoreApp struct {
 func New(postgresConnectionInfo config.Storage, redisConnectionInfo config.Redis, minioConnectInfo config.Minio) (*StoreApp, error) {
 	db, err := sql.Open("postgres", postgresConnectionInfo.ConnectionString)
 	if err != nil {
-		return nil, fmt.Errorf("error in process db connection : %w", err)
+		return nil, ctxerrors.Wrap(fmt.Sprintf("error in process db connection `postgres`"), err)
 	}
 	sqlxDb := sqlx.NewDb(db, "postgres")
 
 	cacheStorage, err := cashe.NewRedisCache(redisConnectionInfo.Addr, redisConnectionInfo.Password, redisConnectionInfo.DB, redisConnectionInfo.CacheTTL)
 	if err != nil {
-		return nil, fmt.Errorf("error in process db connection : %w", err)
+		return nil, ctxerrors.Wrap(fmt.Sprintf("error in process db connection `redis`"), err)
 	}
 
 	minioClient, err := s3client.NewMinioClient(minioConnectInfo.Endpoint, minioConnectInfo.AccessKey, minioConnectInfo.SecretKey, minioConnectInfo.Bucket)
 	if err != nil {
-		return nil, fmt.Errorf("error in process db connection : %w", err)
+		return nil, ctxerrors.Wrap(fmt.Sprintf("error in process db connection `minio`"), err)
 	}
 
 	return &StoreApp{

@@ -22,11 +22,8 @@ message User{
   string email = 2;
   string fname = 3;
   string lname = 4;
-  string created_date = 5;
-  string updated_date = 6;
   string avatar = 7;
   string avatar_min = 8;
-  bool is_deleted =9;
 }
 
 message UploadAvatarDTO{

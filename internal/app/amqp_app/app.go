@@ -5,6 +5,7 @@ import (
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient"
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient/rabbitmqclient"
 	"github.com/KBcHMFollower/blog_user_service/internal/config"
+	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
 	"log/slog"
 )
 
@@ -16,7 +17,7 @@ type AmqpApp struct {
 func NewAmqpApp(rabbitmqConnectInfo config.RabbitMq, log *slog.Logger) (*AmqpApp, error) {
 	rabbitMqApp, err := rabbitmqclient.NewRabbitMQClient(rabbitmqConnectInfo.Addr, log)
 	if err != nil {
-		return nil, fmt.Errorf("new rabbitmq Client error: %v", err)
+		return nil, ctxerrors.Wrap("can`t to connect to rabbitmq", err)
 	}
 
 	return &AmqpApp{
@@ -33,7 +34,7 @@ func (app *AmqpApp) Start() error {
 	for name, handler := range app.handlers {
 		err := app.Client.Consume(name, handler)
 		if err != nil {
-			return err
+			return ctxerrors.Wrap(fmt.Sprintf("error in subscribe to query `%s`", name), err)
 		}
 	}
 
@@ -42,7 +43,7 @@ func (app *AmqpApp) Start() error {
 
 func (app *AmqpApp) Stop() error {
 	if err := app.Client.Stop(); err != nil {
-		return fmt.Errorf("stop rabbitmq client error: %v", err)
+		return ctxerrors.Wrap("can`t to stop rabbitmq", err)
 	}
 	return nil
 }

@@ -37,21 +37,31 @@ func New(
 	lib.ContinueOrPanic(err)
 
 	eventRepository := repository.NewEventRepository(storageApp.PostgresStore.Store)
+	subsRepository := repository.NewSubscriberRepository(storageApp.PostgresStore.Store)
 	userRepository := repository.NewUserRepository(storageApp.PostgresStore.Store, storageApp.RedisStore)
 	reqRepository := repository.NewRequestsRepository(storageApp.PostgresStore.Store)
 
-	authService := auth_service.NewUserService(
+	userService := auth_service.NewUserService(
 		log,
-		cfg.JWT.TokenTTL,
-		cfg.JWT.TokenSecret,
 		storageApp.PostgresStore.Store,
 		userRepository,
 		eventRepository,
 		storageApp.S3Client,
 	)
+	authService := auth_service.NewAuthService(
+		userRepository,
+		log,
+		cfg.JWT.TokenTTL,
+		cfg.JWT.TokenSecret,
+		storageApp.PostgresStore.Store,
+	)
 	reqService := auth_service.NewRequestsService(reqRepository, log)
+	subsService := auth_service.NewSubscribersService(
+		subsRepository,
+		log,
+	)
 
-	amqpUsersHandler := amqp_handlers.NewUserHandler(authService, log)
+	amqpUsersHandler := amqp_handlers.NewUserHandler(userService, log)
 
 	rabbitMqApp.RegisterHandler("posts-deleted-feedback", amqpUsersHandler.HandlePostDeletingEvent) //TODO: НА КОНСТАНТУ
 
@@ -62,7 +72,14 @@ func New(
 	)
 
 	workersApp := workers_app.New()
-	grpcApp := grpcapp.New(log, cfg.GRpc.Port, authService, interceptorsChain)
+	grpcApp := grpcapp.New(
+		log,
+		cfg.GRpc.Port,
+		userService,
+		authService,
+		subsService,
+		interceptorsChain,
+	)
 
 	workersApp.AddWorker(workers.NewEventChecker(rabbitMqApp.Client, eventRepository, log, storageApp.PostgresStore.Store))
 

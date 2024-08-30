@@ -2,15 +2,15 @@ package workers_dep
 
 import (
 	"context"
+	repositories_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
-	"github.com/KBcHMFollower/blog_user_service/internal/repository"
 	"github.com/google/uuid"
 )
 
 type EventUpdater interface {
-	SetStatusInEvents(ctx context.Context, eventsId []uuid.UUID, status repository.MessageStatus) error
+	SetStatuses(ctx context.Context, eventsId []uuid.UUID, status repositories_transfer.MessageStatus) error
 }
 
 type EventGetter interface {
-	GetEventsWithStatus(ctx context.Context, status repository.MessageStatus, limit uint64) ([]*models.EventInfo, error)
+	EventsWithStatus(ctx context.Context, status repositories_transfer.MessageStatus, limit uint64) ([]*models.EventInfo, error)
 }

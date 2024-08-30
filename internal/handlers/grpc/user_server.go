@@ -14,10 +14,11 @@ import (
 type GRPCUsers struct {
 	usersv1.UnimplementedUsersServiceServer
 	userService services_interfaces.UserService
+	subsService services_interfaces.SubsService
 	log         *slog.Logger
 }
 
-func RegisterUserServer(gRPC *grpc.Server, userService services_interfaces.UserService, log *slog.Logger) {
+func RegisterUserServer(gRPC *grpc.Server, userService services_interfaces.UserService, subsService services_interfaces.SubsService, log *slog.Logger) {
 	usersv1.RegisterUsersServiceServer(gRPC, &GRPCUsers{userService: userService, log: log})
 }
 
@@ -47,7 +48,7 @@ func (s *GRPCUsers) GetSubscribers(ctx context.Context, req *usersv1.GetSubscrib
 		return nil, err
 	}
 
-	subscribers, err := s.userService.GetSubscribers(ctx, &services_transfer.GetSubscribersInfo{
+	subscribers, err := s.subsService.GetSubscribers(ctx, &services_transfer.GetSubscribersInfo{
 		BloggerId: bloggerId,
 		Page:      req.Page,
 		Size:      req.Size,
@@ -70,7 +71,7 @@ func (s *GRPCUsers) GetSubscriptions(ctx context.Context, req *usersv1.GetSubscr
 		return nil, err
 	}
 
-	subscriptions, err := s.userService.GetSubscriptions(ctx, &services_transfer.GetSubscriptionsInfo{
+	subscriptions, err := s.subsService.GetSubscriptions(ctx, &services_transfer.GetSubscriptionsInfo{
 		SubscriberId: subscriberId,
 		Page:         req.Page,
 		Size:         req.Size,
@@ -141,7 +142,7 @@ func (s *GRPCUsers) Subscribe(ctx context.Context, req *usersv1.SubscribeDTO) (*
 		return nil, err
 	}
 
-	if err := s.userService.Subscribe(ctx, &services_transfer.SubscribeInfo{
+	if err := s.subsService.Subscribe(ctx, &services_transfer.SubscribeInfo{
 		SubscriberId: subscriberId,
 		BloggerId:    bloggerId,
 	}); err != nil {
@@ -169,7 +170,7 @@ func (s *GRPCUsers) Unsubscribe(ctx context.Context, req *usersv1.SubscribeDTO) 
 		return nil, err
 	}
 
-	if err := s.userService.Unsubscribe(ctx, &services_transfer.SubscribeInfo{
+	if err := s.subsService.Unsubscribe(ctx, &services_transfer.SubscribeInfo{
 		SubscriberId: subscriberId,
 		BloggerId:    bloggerId,
 	}); err != nil {
