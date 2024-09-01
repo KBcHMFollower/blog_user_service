@@ -1,0 +1,54 @@
+# Системные файлы
+.DS_Store
+Thumbs.db
+
+# Директории модулей Go
+/bin/
+/pkg/
+/vendor/
+
+# Файлы сборки
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Зависимости Go
+/go.sum
+/go.work
+/go.work.sum
+
+# Директория, используемая GoLand для сборки и хранения временных файлов
+.idea/
+*.iml
+/.vscode/
+/run/
+/coverage.out
+
+# Логи и временные файлы
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Базы данных
+*.db
+*.sqlite
+
+# Конфигурационные файлы (если они генерируются)
+config.yaml
+.env
+
+# Файлы тестирования
+/testdata/
+
+# Если используются утилиты контейнеризации, такие как Docker
+docker-compose.override.yml
+.envrc
+*.env
+
+# Если используются специфичные для GoLand файлы настроек, их тоже можно исключить
+/.idea/
+/*.iml
