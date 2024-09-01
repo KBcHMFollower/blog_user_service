@@ -9,19 +9,23 @@ const (
 	UserEmailCondition UserFieldTarget = "email"
 )
 
-type GetUserInfo struct {
-	Target UserFieldTarget
-	Value  interface{}
+type GetUsersCountInfo struct {
+	Condition map[UserFieldTarget]interface{}
 }
 
-type UserFieldInfo struct {
-	Name  string
-	Value string
+type GetUsersInfo struct {
+	Size      uint64
+	Page      uint64
+	Condition map[UserFieldTarget]interface{}
+}
+
+type GetUserInfo struct {
+	Condition map[UserFieldTarget]interface{}
 }
 
 type UpdateUserInfo struct {
 	Id         uuid.UUID
-	UpdateInfo []*UserFieldInfo
+	UpdateInfo map[string]any
 }
 
 type CreateUserInfo struct {

@@ -3,30 +3,40 @@ package grpcservers
 import (
 	"context"
 	authv1 "github.com/KBcHMFollower/blog_user_service/api/protos/gen/auth"
-	services_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
+	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
+	servicestransfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
+	handlersdep "github.com/KBcHMFollower/blog_user_service/internal/handlers/dep"
+	handlersutils "github.com/KBcHMFollower/blog_user_service/internal/handlers/lib"
 	"github.com/KBcHMFollower/blog_user_service/internal/logger"
-	services_interfaces "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces"
+	servicesinterfaces "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces"
 	"google.golang.org/grpc"
-	"log/slog"
 )
 
 type GRPCAuth struct {
 	authv1.UnimplementedAuthServer
-	authService services_interfaces.AuthService
-	log         *slog.Logger
+	authService servicesinterfaces.AuthService
+	log         logger.Logger
+	validator   handlersdep.Validator
 }
 
-func RegisterAuthServer(gRPC *grpc.Server, authService services_interfaces.AuthService, log *slog.Logger) {
-	authv1.RegisterAuthServer(gRPC, &GRPCAuth{authService: authService, log: log})
+func RegisterAuthServer(gRPC *grpc.Server, authService servicesinterfaces.AuthService, validator handlersdep.Validator, log logger.Logger) {
+	authv1.RegisterAuthServer(gRPC, &GRPCAuth{authService: authService, log: log, validator: validator})
 }
 
 func (s *GRPCAuth) Login(ctx context.Context, req *authv1.LoginDTO) (*authv1.LoginRTO, error) {
-	token, err := s.authService.Login(ctx, &services_transfer.LoginInfo{
+	logInfo := servicestransfer.LoginInfo{
 		Email:    req.Email,
 		Password: req.Password,
-	})
+	}
+
+	if err := s.validator.Struct(logInfo); err != nil {
+		s.log.DebugContext(ctxerrors.ErrorCtx(ctx, err), err.Error())
+		return nil, handlersutils.ReturnValidationError(err)
+	}
+
+	token, err := s.authService.Login(ctx, &logInfo)
 	if err != nil {
-		s.log.ErrorContext(ctx, "can`t login", logger.ErrKey, err.Error())
+		s.log.ErrorContext(ctxerrors.ErrorCtx(ctx, err), "can`t login", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
@@ -36,12 +46,21 @@ func (s *GRPCAuth) Login(ctx context.Context, req *authv1.LoginDTO) (*authv1.Log
 }
 
 func (s *GRPCAuth) Register(ctx context.Context, req *authv1.RegisterDTO) (*authv1.RegisterRTO, error) {
-	token, err := s.authService.Register(ctx, &services_transfer.RegisterInfo{
+	regInfo := servicestransfer.RegisterInfo{
 		Email:    req.Email,
 		Password: req.Password,
-	})
+		FName:    req.Fname,
+		LName:    req.Lname,
+	}
+
+	if err := s.validator.Struct(&regInfo); err != nil {
+		s.log.DebugContext(ctxerrors.ErrorCtx(ctx, err), "validation err", logger.ErrKey, err.Error())
+		return nil, handlersutils.ReturnValidationError(err)
+	}
+
+	token, err := s.authService.Register(ctx, &regInfo)
 	if err != nil {
-		s.log.ErrorContext(ctx, "can`t register", logger.ErrKey, err.Error())
+		s.log.ErrorContext(ctxerrors.ErrorCtx(ctx, err), "can`t register", logger.ErrKey, err.Error())
 		return nil, err
 	}
 
@@ -51,11 +70,17 @@ func (s *GRPCAuth) Register(ctx context.Context, req *authv1.RegisterDTO) (*auth
 }
 
 func (s *GRPCAuth) CheckAuth(ctx context.Context, req *authv1.CheckAuthDTO) (*authv1.CheckAuthRTO, error) {
-	token, err := s.authService.CheckAuth(ctx, &services_transfer.CheckAuthInfo{
+	checkAuthInfo := servicestransfer.CheckAuthInfo{
 		AccessToken: req.Token,
-	})
+	}
+
+	if err := s.validator.Struct(checkAuthInfo); err != nil {
+		return nil, handlersutils.ReturnValidationError(err)
+	}
+
+	token, err := s.authService.CheckAuth(ctx, &checkAuthInfo)
 	if err != nil {
-		s.log.ErrorContext(ctx, "can`t check", logger.ErrKey, err.Error())
+		s.log.ErrorContext(ctxerrors.ErrorCtx(ctx, err), "can`t check", logger.ErrKey, err.Error())
 		return nil, err
 	}
 

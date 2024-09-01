@@ -1,15 +1,15 @@
 package services_transfer
 
 type RegisterInfo struct {
-	Email    string
-	Password string
-	FName    string
-	LName    string
+	Email    string `validate:"required,email"`
+	Password string `validate:"required,min=8"`
+	FName    string `validate:"required,alpha"`
+	LName    string `validate:"required,alpha"`
 }
 
 type LoginInfo struct {
-	Email    string
-	Password string
+	Email    string `validate:"required,email"`
+	Password string `validate:"required,min=8"`
 }
 
 type CheckAuthInfo struct {

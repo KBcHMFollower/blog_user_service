@@ -37,6 +37,6 @@ CREATE INDEX IF NOT EXISTS idx_done ON amqp_messages(status);
 CREATE TABLE IF NOT EXISTS request_keys
 (
     id UUID PRIMARY KEY ,
-    idempotency_key UUID NOT NULL ,
+    idempotency_key UUID NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ikey ON request_keys(idempotency_key);

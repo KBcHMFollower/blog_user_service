@@ -2,33 +2,35 @@ package services
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
-	repositories_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
-	services_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
+	repositoriestransfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
+	servicestransfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
+	"github.com/KBcHMFollower/blog_user_service/internal/logger"
 	dep "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces/dep"
-	"log/slog"
 )
 
-type requestsStore interface {
+type reqSvcRequestsStore interface {
 	dep.RequestsCreator
 	dep.RequestsGetter
 }
 
 type RequestsService struct {
-	reqRepository requestsStore
-	log           *slog.Logger
+	reqRepository reqSvcRequestsStore
+	log           logger.Logger
 }
 
-func NewRequestsService(reqRepository requestsStore, log *slog.Logger) *RequestsService {
+func NewRequestsService(reqRepository reqSvcRequestsStore, log logger.Logger) *RequestsService {
 	return &RequestsService{
 		reqRepository: reqRepository,
 		log:           log,
 	}
 }
 
-func (rs *RequestsService) CheckAndCreate(ctx context.Context, checkInfo services_transfer.RequestsCheckExistsInfo) (bool, error) {
+func (rs *RequestsService) CheckAndCreate(ctx context.Context, checkInfo servicestransfer.RequestsCheckExistsInfo) (bool, error) {
 	res, err := rs.reqRepository.Get(ctx, checkInfo.Key, nil)
-	if err != nil {
+	if err != nil && !errors.Is(err, ctxerrors.ErrNotFound) && !errors.Is(err, sql.ErrNoRows) {
 		return false, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("cant get request from repository", err))
 	}
 
@@ -36,7 +38,7 @@ func (rs *RequestsService) CheckAndCreate(ctx context.Context, checkInfo service
 		return true, nil
 	}
 
-	err = rs.reqRepository.Create(ctx, repositories_transfer.CreateRequestInfo{
+	err = rs.reqRepository.Create(ctx, repositoriestransfer.CreateRequestInfo{
 		Key: checkInfo.Key,
 	}, nil)
 	if err != nil {

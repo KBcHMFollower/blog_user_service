@@ -4,10 +4,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/KBcHMFollower/blog_user_service/internal/clients/cashe"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/cache"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/cache/redis"
 	s3client "github.com/KBcHMFollower/blog_user_service/internal/clients/s3"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/s3/minio"
 	"github.com/KBcHMFollower/blog_user_service/internal/config"
 	"github.com/KBcHMFollower/blog_user_service/internal/database"
+	"github.com/KBcHMFollower/blog_user_service/internal/database/postgres"
 	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
@@ -18,11 +21,11 @@ type PostgresStore struct {
 	Store         database.DBWrapper
 	migrationPath string
 	db            *sql.DB
-} //TODO: ПЕРЕПИСАТЬ МИГРАТОР, ЭТО НЕ НОРМ
+}
 
 type StoreApp struct {
 	PostgresStore *PostgresStore
-	RedisStore    cashe.CasheStorage
+	RedisStore    cache.CacheStorage
 	S3Client      s3client.S3Client
 }
 
@@ -31,21 +34,24 @@ func New(postgresConnectionInfo config.Storage, redisConnectionInfo config.Redis
 	if err != nil {
 		return nil, ctxerrors.Wrap(fmt.Sprintf("error in process db connection `postgres`"), err)
 	}
-	sqlxDb := sqlx.NewDb(db, "postgres")
+	sqlxDb, err := sqlx.Open("postgres", postgresConnectionInfo.ConnectionString)
+	if err != nil {
+		return nil, ctxerrors.Wrap(fmt.Sprintf("error in process db connection `postgres`"), err)
+	}
 
-	cacheStorage, err := cashe.NewRedisCache(redisConnectionInfo.Addr, redisConnectionInfo.Password, redisConnectionInfo.DB, redisConnectionInfo.CacheTTL)
+	cacheStorage, err := redis.NewRedisCache(redisConnectionInfo.Addr, redisConnectionInfo.Password, redisConnectionInfo.DB, redisConnectionInfo.CacheTTL)
 	if err != nil {
 		return nil, ctxerrors.Wrap(fmt.Sprintf("error in process db connection `redis`"), err)
 	}
 
-	minioClient, err := s3client.NewMinioClient(minioConnectInfo.Endpoint, minioConnectInfo.AccessKey, minioConnectInfo.SecretKey, minioConnectInfo.Bucket)
+	minioClient, err := minio.NewMinioClient(minioConnectInfo.Endpoint, minioConnectInfo.AccessKey, minioConnectInfo.SecretKey, minioConnectInfo.Bucket)
 	if err != nil {
 		return nil, ctxerrors.Wrap(fmt.Sprintf("error in process db connection `minio`"), err)
 	}
 
 	return &StoreApp{
 		PostgresStore: &PostgresStore{
-			Store:         &database.DBDriver{sqlxDb},
+			Store:         &postgres.DBDriver{sqlxDb},
 			migrationPath: postgresConnectionInfo.MigrationPath,
 			db:            db,
 		},

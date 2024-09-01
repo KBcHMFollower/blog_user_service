@@ -3,12 +3,10 @@ package repository
 import (
 	"context"
 	"github.com/KBcHMFollower/blog_user_service/internal/database"
-	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
 	transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
-	rep_utils "github.com/KBcHMFollower/blog_user_service/internal/repository/lib"
+	reputils "github.com/KBcHMFollower/blog_user_service/internal/repository/lib"
 	"github.com/Masterminds/squirrel"
-	"github.com/google/uuid"
 )
 
 const (
@@ -25,7 +23,6 @@ const (
 type SubscribersRepository struct {
 	db       database.Executor
 	qBuilder squirrel.StatementBuilderType
-	//todo: возможно executor
 }
 
 func NewSubscriberRepository(db database.Executor) *SubscribersRepository {
@@ -35,74 +32,50 @@ func NewSubscriberRepository(db database.Executor) *SubscribersRepository {
 	}
 }
 
-func (sr *SubscribersRepository) getSubInfo(ctx context.Context, getInfo transfer.GetSubscriptionInfo) ([]*models.Subscriber, uint32, error) {
+func (sr *SubscribersRepository) Count(ctx context.Context, info transfer.GetSubsCountInfo, tx database.Transaction) (uint32, error) {
+	executor := reputils.GetExecutor(sr.db, tx)
+
+	query := sr.qBuilder.
+		Select("COUNT(*)").
+		From(subsTable).
+		Where(squirrel.Eq(reputils.ConvertMapKeysToStrings(info.Condition)))
+
+	toSql, args, err := query.ToSql()
+	if err != nil {
+		return 0, reputils.ReturnGenerateSqlError(ctx, err)
+	}
+
+	var totalCount uint32
+	if err := executor.GetContext(ctx, &totalCount, toSql, args...); err != nil {
+		return 0, reputils.ReturnExecuteSqlError(ctx, err)
+	}
+
+	return totalCount, nil
+}
+
+func (sr *SubscribersRepository) Subs(ctx context.Context, getInfo transfer.GetSubsInfo, tx database.Transaction) ([]*models.Subscriber, error) {
+	executor := reputils.GetExecutor(sr.db, tx)
+
 	offset := (getInfo.Page - 1) * getInfo.Size
 
 	query := sr.qBuilder.
 		Select(subsAllCol).
 		From(subsTable).
-		Where(squirrel.Eq{getInfo.TargetType: getInfo.UserId}).
+		Where(squirrel.Eq(reputils.ConvertMapKeysToStrings(getInfo.Condition))).
 		Limit(getInfo.Size).
 		Offset(offset)
 
 	toSql, args, err := query.ToSql()
 	if err != nil {
-		return nil, 0, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
+		return nil, reputils.ReturnGenerateSqlError(ctx, err)
 	}
 
 	subscribers := make([]*models.Subscriber, 0)
-	if err := sr.db.SelectContext(ctx, &subscribers, toSql, args...); err != nil {
-		return nil, 0, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
+	if err := executor.SelectContext(ctx, &subscribers, toSql, args...); err != nil {
+		return nil, reputils.ReturnExecuteSqlError(ctx, err)
 	}
 
-	query = sr.qBuilder.
-		Select("COUNT(*)").
-		From(subsTable).
-		Where(squirrel.Eq{getInfo.TargetType: getInfo.UserId})
-
-	toSql, args, err = query.ToSql()
-	if err != nil {
-		return subscribers, 0, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
-	}
-
-	var totalCount uint32
-	if err := sr.db.GetContext(ctx, &totalCount, toSql, args...); err != nil {
-		return nil, 0, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
-	}
-
-	return subscribers, totalCount, nil
-}
-
-func (sr *SubscribersRepository) Subs(ctx context.Context, getInfo transfer.GetSubsInfo) ([]*models.User, uint32, error) {
-	subscribers, totalCount, err := sr.getSubInfo(ctx, transfer.GetSubscriptionInfo{
-		UserId:     getInfo.UserId,
-		Page:       getInfo.Page,
-		Size:       getInfo.Size,
-		TargetType: getInfo.Target,
-	})
-	if err != nil {
-		return nil, totalCount, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
-	}
-
-	subscribersId := make([]uuid.UUID, 0)
-	for _, subscriber := range subscribers {
-		subscribersId = append(subscribersId, subscriber.SubscriberId)
-	}
-
-	sql, args, err := sr.qBuilder.Select(subsAllCol).
-		From(subsTable).
-		Where(squirrel.Eq{subsIdCol: subscribersId}).
-		ToSql()
-	if err != nil {
-		return nil, totalCount, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
-	}
-
-	users := make([]*models.User, 0)
-	if err := sr.db.SelectContext(ctx, &users, sql, args...); err != nil {
-		return nil, totalCount, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
-	}
-
-	return users, totalCount, nil
+	return subscribers, nil
 }
 
 func (sr *SubscribersRepository) Subscribe(ctx context.Context, subInfo transfer.SubscribeToUserInfo) error {
@@ -119,12 +92,12 @@ func (sr *SubscribersRepository) Subscribe(ctx context.Context, subInfo transfer
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
+		return reputils.ReturnGenerateSqlError(ctx, err)
 	}
 
 	_, err = sr.db.ExecContext(ctx, sql, args...)
 	if err != nil {
-		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
+		return reputils.ReturnExecuteSqlError(ctx, err)
 	}
 
 	return nil
@@ -141,12 +114,12 @@ func (sr *SubscribersRepository) Unsubscribe(ctx context.Context, unsubInfo tran
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
+		return reputils.ReturnGenerateSqlError(ctx, err)
 	}
 
 	_, err = sr.db.ExecContext(ctx, sql, args...)
 	if err != nil {
-		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
+		return reputils.ReturnExecuteSqlError(ctx, err)
 	}
 
 	return nil

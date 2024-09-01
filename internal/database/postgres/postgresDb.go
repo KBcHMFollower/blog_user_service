@@ -1,9 +1,10 @@
-package database
+package postgres
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/KBcHMFollower/blog_user_service/internal/database"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -18,6 +19,6 @@ func (db *DBDriver) Stop() error {
 	return nil
 }
 
-func (db *DBDriver) BeginTxCtx(ctx context.Context, opts *sql.TxOptions) (Transaction, error) {
+func (db *DBDriver) BeginTxCtx(ctx context.Context, opts *sql.TxOptions) (database.Transaction, error) {
 	return db.DB.BeginTxx(ctx, opts)
 }

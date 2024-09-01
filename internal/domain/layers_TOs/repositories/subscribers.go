@@ -2,25 +2,21 @@ package repositories_transfer
 
 import "github.com/google/uuid"
 
-type getSubType = string
+type GetSubType = string
 
 const (
-	SubscribersTarget   getSubType = "blogger_id"
-	SubscriptionsTarget getSubType = "subscriber_id"
+	SubscribersTarget   GetSubType = "blogger_id"
+	SubscriptionsTarget GetSubType = "subscriber_id"
 )
 
-type GetSubscriptionInfo struct {
-	UserId     uuid.UUID
-	Page       uint64
-	Size       uint64
-	TargetType getSubType
+type GetSubsCountInfo struct {
+	Condition map[GetSubType]any
 }
 
 type GetSubsInfo struct {
-	Target getSubType
-	UserId uuid.UUID
-	Page   uint64
-	Size   uint64
+	Condition map[GetSubType]any
+	Page      uint64
+	Size      uint64
 }
 
 type SubscribeToUserInfo struct {

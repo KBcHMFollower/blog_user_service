@@ -7,15 +7,17 @@ import (
 	grpcapp "github.com/KBcHMFollower/blog_user_service/internal/app/grpc_app"
 	"github.com/KBcHMFollower/blog_user_service/internal/app/store_app"
 	"github.com/KBcHMFollower/blog_user_service/internal/app/workers_app"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient"
 	"github.com/KBcHMFollower/blog_user_service/internal/config"
-	amqp_handlers "github.com/KBcHMFollower/blog_user_service/internal/handlers/amqp"
+	amqphandlers "github.com/KBcHMFollower/blog_user_service/internal/handlers/amqp"
 	"github.com/KBcHMFollower/blog_user_service/internal/interceptors"
 	"github.com/KBcHMFollower/blog_user_service/internal/lib"
+	"github.com/KBcHMFollower/blog_user_service/internal/lib/validators"
+	"github.com/KBcHMFollower/blog_user_service/internal/logger"
 	"github.com/KBcHMFollower/blog_user_service/internal/repository"
-	auth_service "github.com/KBcHMFollower/blog_user_service/internal/services"
+	authservice "github.com/KBcHMFollower/blog_user_service/internal/services"
 	"github.com/KBcHMFollower/blog_user_service/internal/workers"
 	"google.golang.org/grpc"
-	"log/slog"
 )
 
 type App struct {
@@ -23,17 +25,20 @@ type App struct {
 	amqpApp    *amqp_app.AmqpApp
 	storeApp   *store_app.StoreApp
 	workersApp *workers_app.WorkersApp
-	log        *slog.Logger
+	log        logger.Logger
 	cfg        *config.Config
 }
 
 func New(
 	cfg *config.Config,
-	log *slog.Logger,
+	log logger.Logger,
 ) *App {
 	storageApp, err := store_app.New(cfg.Storage, cfg.Redis, cfg.Minio)
 	lib.ContinueOrPanic(err)
 	rabbitMqApp, err := amqp_app.NewAmqpApp(cfg.RabbitMq, log)
+	lib.ContinueOrPanic(err)
+
+	vldor, err := validators.NewValidator()
 	lib.ContinueOrPanic(err)
 
 	eventRepository := repository.NewEventRepository(storageApp.PostgresStore.Store)
@@ -41,29 +46,32 @@ func New(
 	userRepository := repository.NewUserRepository(storageApp.PostgresStore.Store, storageApp.RedisStore)
 	reqRepository := repository.NewRequestsRepository(storageApp.PostgresStore.Store)
 
-	userService := auth_service.NewUserService(
+	userService := authservice.NewUserService(
 		log,
 		storageApp.PostgresStore.Store,
 		userRepository,
 		eventRepository,
 		storageApp.S3Client,
 	)
-	authService := auth_service.NewAuthService(
+	authService := authservice.NewAuthService(
 		userRepository,
 		log,
 		cfg.JWT.TokenTTL,
 		cfg.JWT.TokenSecret,
 		storageApp.PostgresStore.Store,
 	)
-	reqService := auth_service.NewRequestsService(reqRepository, log)
-	subsService := auth_service.NewSubscribersService(
+	reqService := authservice.NewRequestsService(reqRepository, log)
+	subsService := authservice.NewSubscribersService(
 		subsRepository,
+		userRepository,
+		storageApp.PostgresStore.Store,
 		log,
 	)
+	messService := authservice.NewMessagesService(eventRepository, log)
 
-	amqpUsersHandler := amqp_handlers.NewUserHandler(userService, log)
+	amqpUsersHandler := amqphandlers.NewUserHandler(userService, messService, log)
 
-	rabbitMqApp.RegisterHandler("posts-deleted-feedback", amqpUsersHandler.HandlePostDeletingEvent) //TODO: НА КОНСТАНТУ
+	rabbitMqApp.RegisterHandler(amqpclient.PostsDeletedEventKey, amqpUsersHandler.HandlePostDeletingEvent)
 
 	interceptorsChain := grpc.ChainUnaryInterceptor(
 		interceptors.ReqLoggingInterceptor(log),
@@ -78,6 +86,7 @@ func New(
 		userService,
 		authService,
 		subsService,
+		vldor,
 		interceptorsChain,
 	)
 

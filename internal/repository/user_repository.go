@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/KBcHMFollower/blog_user_service/internal/clients/cashe"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/cache"
 	"github.com/KBcHMFollower/blog_user_service/internal/database"
 	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
 	transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
-	"github.com/KBcHMFollower/blog_user_service/internal/lib"
-	rep_utils "github.com/KBcHMFollower/blog_user_service/internal/repository/lib"
+	reputils "github.com/KBcHMFollower/blog_user_service/internal/repository/lib"
 	"time"
 
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
@@ -27,7 +26,7 @@ const (
 )
 
 const (
-	usersIdCol          = "user_id"
+	usersIdCol          = "id"
 	userEmailCol        = "email"
 	usersPassHashCol    = "pass_hash"
 	usersAvatarCol      = "avatar"
@@ -50,17 +49,17 @@ var (
 type UserRepository struct {
 	db       database.DBWrapper
 	qBuilder squirrel.StatementBuilderType
-	cache    cashe.CasheStorage
+	cache    cache.CacheStorage
 }
 
-func NewUserRepository(dbDriver database.DBWrapper, cacheStorage cashe.CasheStorage) *UserRepository {
+func NewUserRepository(dbDriver database.DBWrapper, cacheStorage cache.CacheStorage) *UserRepository {
 	return &UserRepository{db: dbDriver, cache: cacheStorage, qBuilder: squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)}
 }
 
 func (r *UserRepository) Create(ctx context.Context, createDto *transfer.CreateUserInfo, tx database.Transaction) (uuid.UUID, error) {
 	user := models.NewUserModel(createDto.Email, createDto.FName, createDto.LName, createDto.HashPass)
 
-	executor := rep_utils.GetExecutor(r.db, tx)
+	executor := reputils.GetExecutor(r.db, tx)
 
 	query := r.qBuilder.Insert(usersTable).
 		SetMap(map[string]interface{}{
@@ -76,77 +75,125 @@ func (r *UserRepository) Create(ctx context.Context, createDto *transfer.CreateU
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return uuid.Nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
+		return uuid.Nil, reputils.ReturnGenerateSqlError(ctx, err)
 	}
 
 	var id uuid.UUID
 	if err := executor.GetContext(ctx, &id, sql, args...); err != nil {
-		return uuid.Nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
+		return uuid.Nil, reputils.ReturnExecuteSqlError(ctx, err)
 	}
 
 	return id, nil
 }
 
 func (r *UserRepository) User(ctx context.Context, condition transfer.GetUserInfo, tx database.Transaction) (*models.User, error) {
-	executor := rep_utils.GetExecutor(r.db, tx)
+	executor := reputils.GetExecutor(r.db, tx)
 
 	sql, args, err := r.qBuilder.Select("*").
 		From(usersTable).
-		Where(squirrel.Eq{conditionMap[condition.Target]: condition.Value}).
+		Where(squirrel.Eq(reputils.ConvertMapKeysToStrings(condition.Condition))).
 		ToSql()
 	if err != nil {
-		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
+		return nil, reputils.ReturnGenerateSqlError(ctx, err)
 	}
 
 	var user models.User
 	if err := executor.GetContext(ctx, &user, sql, args...); err != nil {
-		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
+		return nil, ctxerrors.WrapCtx(ctx, reputils.ReturnExecuteSqlError(ctx, err))
 	}
 
 	return &user, nil
 }
 
-func (r *UserRepository) Update(ctx context.Context, updateData transfer.UpdateUserInfo, tx database.Transaction) error { //TODO
-	executor := rep_utils.GetExecutor(r.db, tx)
+func (r *UserRepository) Count(ctx context.Context, condition transfer.GetUsersCountInfo, tx database.Transaction) (int64, error) {
+	executor := reputils.GetExecutor(r.db, tx)
+
+	query := r.qBuilder.
+		Select("COUNT(*)").
+		From(usersTable).
+		Where(squirrel.Eq(reputils.ConvertMapKeysToStrings(condition.Condition)))
+
+	sqlStr, args, err := query.ToSql()
+	if err != nil {
+		return 0, ctxerrors.WrapCtx(ctx, reputils.ReturnGenerateSqlError(ctx, err))
+	}
+
+	var count int64
+	if err := executor.GetContext(ctx, &count, sqlStr, args...); err != nil {
+		return 0, ctxerrors.WrapCtx(ctx, reputils.ReturnExecuteSqlError(ctx, err))
+	}
+
+	return count, nil
+}
+
+func (r *UserRepository) Users(ctx context.Context, info *transfer.GetUsersInfo, tx database.Transaction) ([]*models.User, error) {
+	executor := reputils.GetExecutor(r.db, tx)
+
+	if info.Page == 0 {
+		info.Page = 1
+	}
+	if info.Size == 0 {
+		info.Size = 20
+	}
+
+	offset := (info.Page - 1) * info.Size
+
+	query := r.qBuilder.
+		Select("*").
+		From(usersTable).
+		Where(squirrel.Eq(reputils.ConvertMapKeysToStrings(info.Condition))).
+		Limit(info.Size).
+		Offset(offset)
+
+	sqlStr, args, err := query.ToSql()
+	if err != nil {
+		return nil, ctxerrors.WrapCtx(ctx, reputils.ReturnGenerateSqlError(ctx, err))
+	}
+
+	var users []*models.User
+	if err := executor.SelectContext(ctx, &users, sqlStr, args...); err != nil {
+		return nil, ctxerrors.WrapCtx(ctx, reputils.ReturnExecuteSqlError(ctx, err))
+	}
+
+	return users, nil
+}
+
+func (r *UserRepository) Update(ctx context.Context, updateData transfer.UpdateUserInfo, tx database.Transaction) error {
+	executor := reputils.GetExecutor(r.db, tx)
+
+	updateData.UpdateInfo["updated_date"] = time.Now()
 
 	query := r.qBuilder.
 		Update(usersTable).
 		Where(squirrel.Eq{usersIdCol: updateData.Id}).
-		Set("updated_date", time.Now())
-
-	for _, item := range updateData.UpdateInfo {
-		if lib.Contains(notUpdatableCols, item.Name) {
-			continue
-		}
-		query = query.Set(item.Name, item.Value)
-	}
+		SetMap(updateData.UpdateInfo)
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
+		return reputils.ReturnGenerateSqlError(ctx, err)
 	}
 
 	_, err = executor.ExecContext(ctx, sql, args...)
 	if err != nil {
-		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
+		return reputils.ReturnExecuteSqlError(ctx, err)
 	}
 
 	return nil
 }
 
 func (r *UserRepository) Delete(ctx context.Context, delInfo transfer.DeleteUserInfo, tx database.Transaction) error {
-	executor := rep_utils.GetExecutor(r.db, tx)
+	executor := reputils.GetExecutor(r.db, tx)
 
 	query := r.qBuilder.Delete(usersTable).
 		Where(squirrel.Eq{usersIdCol: delInfo.Id})
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
+		return reputils.ReturnGenerateSqlError(ctx, err)
 	}
 
 	if _, err := executor.ExecContext(ctx, sql, args...); err != nil {
-		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
+		return reputils.ReturnExecuteSqlError(ctx, err)
 	}
 
 	return nil
@@ -169,12 +216,12 @@ func (r *UserRepository) RollBackUser(ctx context.Context, user models.User) err
 
 	toSql, args, err := query.ToSql()
 	if err != nil {
-		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToGenerateSqlMessage, err))
+		return reputils.ReturnGenerateSqlError(ctx, err)
 	}
 
 	var id uuid.UUID
 	if err := r.db.GetContext(ctx, &id, toSql, args...); err != nil {
-		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(rep_utils.FailedToExecuteQuery, err))
+		return reputils.ReturnExecuteSqlError(ctx, err)
 	}
 
 	return nil

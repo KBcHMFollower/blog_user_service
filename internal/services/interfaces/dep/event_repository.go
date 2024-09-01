@@ -3,7 +3,7 @@ package services_dep_interfaces
 import (
 	"context"
 	"github.com/KBcHMFollower/blog_user_service/internal/database"
-	repositories_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
+	repositoriestransfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
 	"github.com/google/uuid"
 )
@@ -13,5 +13,5 @@ type EventGetter interface {
 }
 
 type EventCreator interface {
-	Create(ctx context.Context, info repositories_transfer.CreateEventInfo, tx database.Transaction) error
+	Create(ctx context.Context, info repositoriestransfer.CreateEventInfo, tx database.Transaction) error
 }

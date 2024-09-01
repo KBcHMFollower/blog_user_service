@@ -1,7 +1,8 @@
-package cashe
+package redis
 
 import (
 	"context"
+	"github.com/KBcHMFollower/blog_user_service/internal/clients/cache"
 	"github.com/go-redis/redis/v8"
 	"time"
 )
@@ -11,7 +12,7 @@ type RedisCache struct {
 	ttl    time.Duration
 }
 
-func NewRedisCache(addr string, password string, db int, ttl time.Duration) (*RedisCache, error) {
+func NewRedisCache(addr string, password string, db int, ttl time.Duration) (cache.CacheStorage, error) {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: password,

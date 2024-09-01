@@ -1,9 +1,10 @@
-package s3client
+package minio
 
 import (
 	"bytes"
 	"context"
 	"fmt"
+	s3client "github.com/KBcHMFollower/blog_user_service/internal/clients/s3"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"io"
@@ -19,7 +20,7 @@ type MinioClient struct {
 	bucketName  string
 }
 
-func NewMinioClient(endpoint string, accessKeyID string, secretAccessKey string, bucketName string) (*MinioClient, error) {
+func NewMinioClient(endpoint string, accessKeyID string, secretAccessKey string, bucketName string) (s3client.S3Client, error) {
 	minioClient, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
 		Secure: false,

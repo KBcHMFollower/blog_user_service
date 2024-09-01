@@ -2,7 +2,7 @@ package interceptors
 
 import (
 	"context"
-	services_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
+	servicestransfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
 	"github.com/KBcHMFollower/blog_user_service/internal/interceptors/interfaces/dep"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -18,7 +18,6 @@ var (
 	ErrInternal          = status.Error(codes.Internal, "Internal error")
 )
 
-// TODO: ВРОДЕ ДОЛЖНО СНАЧАЛА ВЫПОЛНЯТЬСЯ А ПОТОМ ЗАПИСЫВАТЬСЯ
 func IdempotencyInterceptor(idmChecker dep.IdempotencyKeysChecker) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
@@ -41,7 +40,7 @@ func IdempotencyInterceptor(idmChecker dep.IdempotencyKeysChecker) grpc.UnarySer
 			return nil, ErrCantParse
 		}
 
-		exist, err := idmChecker.CheckAndCreate(ctx, services_transfer.RequestsCheckExistsInfo{
+		exist, err := idmChecker.CheckAndCreate(ctx, servicestransfer.RequestsCheckExistsInfo{
 			Key: idmKey,
 		})
 		if err != nil {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/KBcHMFollower/blog_user_service/internal/config"
 	"github.com/KBcHMFollower/blog_user_service/internal/database"
-	"github.com/KBcHMFollower/blog_user_service/internal/logger"
+	"github.com/KBcHMFollower/blog_user_service/internal/logger/slog_logger"
 	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
 )
@@ -22,7 +22,7 @@ func init() {
 		Short: "migrate",
 		Run: func(cmd *cobra.Command, args []string) {
 			cfg := config.MustLoad(argConfigPath)
-			log := logger.SetupLogger(cfg.Env)
+			log := slog_logger.SetupSlogLogger(cfg.Env)
 
 			log.Info(fmt.Sprintf("starting migration with : type-%s, db-%s", argMigrateType, argDbName))
 

@@ -4,21 +4,23 @@ import (
 	usersv1 "github.com/KBcHMFollower/blog_user_service/api/protos/gen/users"
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
 	"github.com/google/uuid"
-	"time"
 )
 
-type UpdateFieldInfo struct {
-	Name  string
-	Value string
-}
+type UserFieldTarget string
+
+const (
+	UserEmailUpdateTarget UserFieldTarget = "email"
+	UserFNameUpdateTarget UserFieldTarget = "fname"
+	UserLNameUpdateTarget UserFieldTarget = "lname"
+)
 
 type UpdateUserInfo struct {
-	Id           uuid.UUID
-	UpdateFields []UpdateFieldInfo
+	Id           uuid.UUID               `validate:"required,uuid"`
+	UpdateFields map[UserFieldTarget]any `validate:"required,mapkeys-user-update"`
 }
 
 type DeleteUserInfo struct {
-	Id uuid.UUID
+	Id uuid.UUID `validate:"required,uuid"`
 }
 
 type UserResult struct {
@@ -49,29 +51,13 @@ func GetUserResultFromModel(user *models.User) UserResult {
 	}
 }
 
-func ConvertUpdateFieldsInfoFromProto(updateFields []*usersv1.UpdateUserItem) []UpdateFieldInfo {
-	var results []UpdateFieldInfo = make([]UpdateFieldInfo, 0, len(updateFields))
-
-	for _, field := range updateFields {
-		results = append(results, UpdateFieldInfo{
-			Name:  field.Name,
-			Value: field.Value,
-		})
-	}
-
-	return results
-}
-
 func ConvertUserResToProto(user *UserResult) *usersv1.User {
 	return &usersv1.User{
-		Id:          user.Id.String(),
-		Email:       user.Email,
-		Fname:       user.FName,
-		Lname:       user.FName,
-		Avatar:      user.Avatar,
-		AvatarMin:   user.AvatarMini,
-		CreatedDate: time.Now().String(),
-		UpdatedDate: time.Now().String(),
-		IsDeleted:   false,
-	} //TODO: Change RDO
+		Id:        user.Id.String(),
+		Email:     user.Email,
+		Fname:     user.FName,
+		Lname:     user.LName,
+		Avatar:    user.Avatar,
+		AvatarMin: user.AvatarMini,
+	}
 }

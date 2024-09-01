@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/KBcHMFollower/blog_user_service/internal/app"
 	"github.com/KBcHMFollower/blog_user_service/internal/config"
-	"github.com/KBcHMFollower/blog_user_service/internal/logger"
+	"github.com/KBcHMFollower/blog_user_service/internal/logger/slog_logger"
 	"github.com/spf13/cobra"
 	"log/slog"
 	"os"
@@ -22,7 +22,7 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			cfg := config.MustLoad(argConfigPath)
 
-			log := logger.SetupLogger(cfg.Env)
+			log := slog_logger.SetupSlogLogger(cfg.Env)
 
 			log.Info("server try to get up!", "env", cfg.Env)
 
@@ -40,7 +40,7 @@ func init() {
 			log.Info("stopping webApp ", slog.String("signal", sign.String()))
 
 			if err := webApp.Stop(); err != nil {
-				log.Error("Error in stopping app", logger.ErrKey, err)
+				log.Error("Error in stopping app", slog_logger.ErrKey, err)
 			}
 		},
 	}

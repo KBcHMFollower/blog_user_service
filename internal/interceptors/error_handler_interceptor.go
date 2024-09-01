@@ -23,6 +23,10 @@ func NewErrorsTransformer() *ErrorsTransformer {
 }
 
 func (et *ErrorsTransformer) GetGrpcError(err error) error {
+	if err == nil {
+		return nil
+	}
+
 	errMapKeys := make([]error, 0, len(et.errorMap))
 	for err := range et.errorMap {
 		errMapKeys = append(errMapKeys, err)

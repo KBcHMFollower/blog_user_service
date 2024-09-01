@@ -4,7 +4,6 @@ import (
 	usersv1 "github.com/KBcHMFollower/blog_user_service/api/protos/gen/users"
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
 	"github.com/google/uuid"
-	"time"
 )
 
 type SubscriberResult struct {
@@ -17,20 +16,20 @@ type SubscriberResult struct {
 }
 
 type GetSubscribersInfo struct {
-	BloggerId uuid.UUID
-	Page      int32
-	Size      int32
+	BloggerId uuid.UUID `validate:"required,uuid"`
+	Page      int32     `validate:"required,gte=1,lte=100"`
+	Size      int32     `validate:"required,gte=1,lte=1000"`
 }
 
 type GetSubscriptionsInfo struct {
-	SubscriberId uuid.UUID
-	Page         int32
-	Size         int32
+	SubscriberId uuid.UUID `validate:"required,uuid"`
+	Page         int32     `validate:"required,gte=1,lte=100"`
+	Size         int32     `validate:"required,gte=1,lte=1000"`
 }
 
 type SubscribeInfo struct {
-	BloggerId    uuid.UUID
-	SubscriberId uuid.UUID
+	BloggerId    uuid.UUID `validate:"required,uuid"`
+	SubscriberId uuid.UUID `validate:"required,uuid"`
 }
 
 type GetSubscribersResult struct {
@@ -64,17 +63,14 @@ func ConvertSubscribersToProto(users []SubscriberResult) []*usersv1.User {
 
 	for _, user := range users {
 		results = append(results, &usersv1.User{
-			Email:       user.Email,
-			Fname:       user.FName,
-			Lname:       user.LName,
-			Avatar:      user.Avatar,
-			AvatarMin:   user.AvatarMini,
-			Id:          user.Id.String(),
-			CreatedDate: time.Now().String(),
-			UpdatedDate: time.Now().String(),
-			IsDeleted:   false,
+			Email:     user.Email,
+			Fname:     user.FName,
+			Lname:     user.LName,
+			Avatar:    user.Avatar,
+			AvatarMin: user.AvatarMini,
+			Id:        user.Id.String(),
 		})
 	}
 
 	return results
-} //TODO: Change RDO
+}

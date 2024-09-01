@@ -6,7 +6,7 @@ import (
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient/rabbitmqclient"
 	"github.com/KBcHMFollower/blog_user_service/internal/config"
 	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
-	"log/slog"
+	"github.com/KBcHMFollower/blog_user_service/internal/logger"
 )
 
 type AmqpApp struct {
@@ -14,7 +14,7 @@ type AmqpApp struct {
 	handlers map[string]amqpclient.AmqpHandlerFunc
 }
 
-func NewAmqpApp(rabbitmqConnectInfo config.RabbitMq, log *slog.Logger) (*AmqpApp, error) {
+func NewAmqpApp(rabbitmqConnectInfo config.RabbitMq, log logger.Logger) (*AmqpApp, error) {
 	rabbitMqApp, err := rabbitmqclient.NewRabbitMQClient(rabbitmqConnectInfo.Addr, log)
 	if err != nil {
 		return nil, ctxerrors.Wrap("can`t to connect to rabbitmq", err)

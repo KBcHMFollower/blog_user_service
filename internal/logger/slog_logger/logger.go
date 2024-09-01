@@ -1,19 +1,10 @@
-package logger
+package slog_logger
 
 import (
 	"context"
+	"github.com/KBcHMFollower/blog_user_service/internal/logger"
 	"log/slog"
 	"os"
-)
-
-const (
-	ReqIdKey        = "req-id"
-	EmailKey        = "email"
-	EventIdKey      = "event-id"
-	ReqUserKey      = "req-user"
-	ActionUserIdKey = "action-user-id"
-	ActionEmailKey  = "action-email"
-	ErrKey          = "err"
 )
 
 const (
@@ -21,10 +12,6 @@ const (
 	envDev   = "dev"
 	envProd  = "prod"
 )
-
-const loggerCtxKey = keyType(0)
-
-type keyType int
 
 type HandlerMiddleware struct {
 	next slog.Handler
@@ -39,7 +26,7 @@ func (h *HandlerMiddleware) Enabled(ctx context.Context, rec slog.Level) bool {
 }
 
 func (h *HandlerMiddleware) Handle(ctx context.Context, rec slog.Record) error {
-	if c, ok := ctx.Value(loggerCtxKey).(map[string]interface{}); ok {
+	if c, ok := ctx.Value(logger.LoggerCtxKey).(map[string]interface{}); ok {
 		for k, v := range c {
 			rec.Add(k, v)
 		}
@@ -55,18 +42,7 @@ func (h *HandlerMiddleware) WithGroup(name string) slog.Handler {
 	return &HandlerMiddleware{next: h.next.WithGroup(name)}
 }
 
-func UpdateLoggerCtx(ctx context.Context, key string, v any) context.Context {
-	c, ok := ctx.Value(loggerCtxKey).(map[string]interface{})
-	if !ok {
-		c = make(map[string]interface{})
-	}
-
-	c[key] = v
-
-	return context.WithValue(ctx, loggerCtxKey, c)
-}
-
-func SetupLogger(env string) *slog.Logger {
+func SetupSlogLogger(env string) logger.Logger {
 	var handler slog.Handler
 
 	switch env {

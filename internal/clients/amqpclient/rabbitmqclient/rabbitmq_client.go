@@ -8,7 +8,6 @@ import (
 	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
 	"github.com/KBcHMFollower/blog_user_service/internal/logger"
 	"github.com/streadway/amqp"
-	"log/slog"
 )
 
 const (
@@ -28,13 +27,13 @@ type RabbitMQClient struct {
 	consConn       *amqp.Connection
 	consCh         *amqp.Channel
 	sendersFactory amqpclient.AmqpSenderFactory
-	log            *slog.Logger
+	log            logger.Logger
 	ctx            context.Context
 }
 
-func NewRabbitMQClient(addr string, log *slog.Logger) (*RabbitMQClient, error) {
+func NewRabbitMQClient(addr string, log logger.Logger) (amqpclient.AmqpClient, error) {
 	ctx := context.Background()
-	logger.UpdateLoggerCtx(ctx, "worker-name", "rabbitmq")
+	ctx = logger.UpdateLoggerCtx(ctx, "worker-name", "rabbitmq")
 
 	pConn, err := amqp.Dial(addr)
 	if err != nil {
@@ -66,7 +65,7 @@ func NewRabbitMQClient(addr string, log *slog.Logger) (*RabbitMQClient, error) {
 	return &RabbitMQClient{ctx: context.Background(), pubConn: cConn, consConn: cConn, pubCh: pCh, consCh: cCh, sendersFactory: sendersFactory, log: log}, nil
 }
 
-func (rc *RabbitMQClient) Stop() error { //TODO
+func (rc *RabbitMQClient) Stop() error { //TODO: МОЖНО В STOP CTX ПРОКИДЫВАТЬ ДЛЯ ЛОГГЕРА
 	var resErr error = nil
 
 	if err := rc.pubCh.Close(); err != nil {
@@ -118,7 +117,7 @@ func (rc *RabbitMQClient) Consume(queueName string, handler amqpclient.AmqpHandl
 	go func() {
 
 		ctx, cancel := context.WithCancel(rc.ctx)
-		logger.UpdateLoggerCtx(ctx, queueLogKey, queueName)
+		ctx = logger.UpdateLoggerCtx(ctx, queueLogKey, queueName)
 
 		for d := range del {
 			select {
@@ -129,15 +128,15 @@ func (rc *RabbitMQClient) Consume(queueName string, handler amqpclient.AmqpHandl
 
 				rc.log.InfoContext(ctx, "received a message", messageLogKey, string(d.Body))
 				if err := handler(ctx, d.Body); err != nil {
-					rc.log.ErrorContext(ctx, "failed to handle a message from queue", logger.ErrKey, err.Error())
+					rc.log.ErrorContext(ctxerrors.ErrorCtx(ctx, err), "failed to handle a message from queue", logger.ErrKey, err.Error())
 					if err := d.Nack(false, false); err != nil {
-						rc.log.ErrorContext(ctx, "failed to nack", logger.ErrKey, err.Error())
+						rc.log.ErrorContext(ctxerrors.ErrorCtx(ctx, err), "failed to nack", logger.ErrKey, err.Error())
 					}
 					continue
 				}
 				rc.log.InfoContext(ctx, "finished consuming a message from queue")
 				if err := d.Ack(false); err != nil {
-					rc.log.ErrorContext(ctx, "failed to ack", logger.ErrKey, err)
+					rc.log.ErrorContext(ctxerrors.ErrorCtx(ctx, err), "failed to ack", logger.ErrKey, err)
 				}
 			}
 

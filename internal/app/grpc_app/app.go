@@ -3,32 +3,34 @@ package grpcapp
 import (
 	"fmt"
 	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
+	handlersdep "github.com/KBcHMFollower/blog_user_service/internal/handlers/dep"
 	grpcservers2 "github.com/KBcHMFollower/blog_user_service/internal/handlers/grpc"
-	services_interfaces "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces"
-	"log/slog"
+	"github.com/KBcHMFollower/blog_user_service/internal/logger"
+	servicesinterfaces "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces"
 	"net"
 
 	"google.golang.org/grpc"
 )
 
 type App struct {
-	log        *slog.Logger
+	log        logger.Logger
 	gRpcServer *grpc.Server
 	port       int
 }
 
 func New(
-	log *slog.Logger,
+	log logger.Logger,
 	port int,
-	userService services_interfaces.UserService,
-	authService services_interfaces.AuthService,
-	subsService services_interfaces.SubsService,
+	userService servicesinterfaces.UserService,
+	authService servicesinterfaces.AuthService,
+	subsService servicesinterfaces.SubsService,
+	validator handlersdep.Validator,
 	interceptor grpc.ServerOption,
 ) *App {
 	gRpcServer := grpc.NewServer(interceptor)
 
-	grpcservers2.RegisterAuthServer(gRpcServer, authService, log)
-	grpcservers2.RegisterUserServer(gRpcServer, userService, subsService, log)
+	grpcservers2.RegisterAuthServer(gRpcServer, authService, validator, log)
+	grpcservers2.RegisterUserServer(gRpcServer, userService, subsService, log, validator)
 
 	return &App{
 		log:        log,

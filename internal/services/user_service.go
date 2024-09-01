@@ -6,16 +6,14 @@ import (
 	"fmt"
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient"
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient/messages"
-	s3client "github.com/KBcHMFollower/blog_user_service/internal/clients/s3"
+	s3client "github.com/KBcHMFollower/blog_user_service/internal/clients/s3/minio"
 	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
-	repositories_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
+	repositoriestransfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
 	transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
 	"github.com/KBcHMFollower/blog_user_service/internal/domain/models"
 	"github.com/KBcHMFollower/blog_user_service/internal/logger"
 	dep "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces/dep"
-	services_utils "github.com/KBcHMFollower/blog_user_service/internal/services/lib"
-	"log/slog"
-
+	servicesutils "github.com/KBcHMFollower/blog_user_service/internal/services/lib"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,38 +28,38 @@ const (
 	avatarUruLogKey     = "avatar-uru"
 )
 
-type eventStore interface {
+type usrSvcEventStore interface {
 	dep.EventCreator
 	dep.EventGetter
 }
 
-type imageStore interface {
+type usrSvcImageStore interface {
 	dep.ImageGetter
 	dep.ImageUploader
 }
 
-type usersStore interface {
+type usrSvcUsersStore interface {
 	dep.UserDeleter
 	dep.UserGetter
 	dep.UserUpdater
 	dep.UserCreator
 }
 
-type SubscribersStore interface {
+type subsSvcSubscribersStore interface {
 	dep.SubscribersGetter
 	dep.SubscribersDealer
 }
 
 type UserService struct {
-	log       *slog.Logger
-	userRep   usersStore
-	eventsRep eventStore
-	subsRep   SubscribersStore
+	log       logger.Logger
+	userRep   usrSvcUsersStore
+	eventsRep usrSvcEventStore
+	subsRep   subsSvcSubscribersStore
 	txCreator dep.TransactionCreator
-	imgStore  imageStore
+	imgStore  usrSvcImageStore
 }
 
-func NewUserService(log *slog.Logger, txCreator dep.TransactionCreator, userRep usersStore, eventsRep eventStore, imgStore imageStore) *UserService {
+func NewUserService(log logger.Logger, txCreator dep.TransactionCreator, userRep usrSvcUsersStore, eventsRep usrSvcEventStore, imgStore usrSvcImageStore) *UserService {
 	return &UserService{
 		log:       log,
 		userRep:   userRep,
@@ -72,51 +70,52 @@ func NewUserService(log *slog.Logger, txCreator dep.TransactionCreator, userRep 
 }
 
 func (a *UserService) GetUserById(ctx context.Context, userId uuid.UUID) (ersUser *transfer.GetUserResult, resErr error) {
-	logger.UpdateLoggerCtx(ctx, logger.ActionUserIdKey, userId)
+	ctx = logger.UpdateLoggerCtx(ctx, logger.ActionUserIdKey, userId)
 
-	a.log.Debug("try to get user by id")
+	a.log.DebugContext(ctx, "try to get user by id")
 
 	tx, err := a.txCreator.BeginTxCtx(ctx, nil)
 	if err != nil {
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t begin tx", err))
 	}
 	defer func() {
-		resErr = services_utils.HandleErrInTransaction(resErr, tx)
+		resErr = servicesutils.HandleErrInTransaction(resErr, tx)
 	}()
 
 	cacheUser, err := a.userRep.TryGetFromCache(ctx, userId)
 	if err != nil {
-		a.log.Debug("can`t get cacheUser from cache: ", "err", err.Error())
+		a.log.DebugContext(ctx, "can`t get cacheUser from cache: ", "err", err.Error())
 	}
 	if cacheUser != nil {
-		a.log.Debug("user found in cache")
+		a.log.DebugContext(ctx, "user found in cache")
 		return &transfer.GetUserResult{
 			User: transfer.GetUserResultFromModel(cacheUser),
 		}, nil
 	}
 
-	a.log.Debug("try to get user by id from db")
+	a.log.DebugContext(ctx, "try to get user by id from db")
 
-	user, err := a.userRep.User(ctx, repositories_transfer.GetUserInfo{
-		Target: repositories_transfer.UserIdCondition,
-		Value:  userId,
+	user, err := a.userRep.User(ctx, repositoriestransfer.GetUserInfo{
+		map[repositoriestransfer.UserFieldTarget]any{
+			repositoriestransfer.UserIdCondition: userId,
+		},
 	}, nil)
 	if err != nil {
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t get cacheUser from db", err))
 	}
 
-	a.log.Debug("user found in db")
+	a.log.DebugContext(ctx, "user found in db")
 
 	if err := a.userRep.SetToCache(ctx, user); err != nil {
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t set cacheUser to db", err))
 	}
-	a.log.Debug("user added to cache")
+	a.log.DebugContext(ctx, "user added to cache")
 
 	if err := tx.Commit(); err != nil {
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t commit tx", err))
 	}
 
-	a.log.Debug("get user by id successfully")
+	a.log.DebugContext(ctx, "get user by id successfully")
 
 	return &transfer.GetUserResult{
 		User: transfer.GetUserResultFromModel(user),
@@ -124,8 +123,8 @@ func (a *UserService) GetUserById(ctx context.Context, userId uuid.UUID) (ersUse
 }
 
 func (a *UserService) UpdateUser(ctx context.Context, updateInfo *transfer.UpdateUserInfo) (resUser *transfer.UpdateUserResult, resErr error) {
-	logger.UpdateLoggerCtx(ctx, logger.ActionUserIdKey, updateInfo.Id)
-	logger.UpdateLoggerCtx(ctx, updateInfoLogKey, updateInfo.UpdateFields)
+	ctx = logger.UpdateLoggerCtx(ctx, logger.ActionUserIdKey, updateInfo.Id)
+	ctx = logger.UpdateLoggerCtx(ctx, updateInfoLogKey, updateInfo.UpdateFields)
 
 	a.log.InfoContext(ctx, "try to update user")
 
@@ -134,33 +133,26 @@ func (a *UserService) UpdateUser(ctx context.Context, updateInfo *transfer.Updat
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t begin tx", err))
 	}
 	defer func() {
-		resErr = services_utils.HandleErrInTransaction(resErr, tx)
+		resErr = servicesutils.HandleErrInTransaction(resErr, tx)
 	}()
 
-	var updateItems = make([]*repositories_transfer.UserFieldInfo, 0)
-	for _, fieldInfo := range updateInfo.UpdateFields {
-		updateItems = append(updateItems, &repositories_transfer.UserFieldInfo{
-			Name:  fieldInfo.Name,
-			Value: fieldInfo.Value,
-		})
-	}
-
-	if err := a.userRep.Update(ctx, repositories_transfer.UpdateUserInfo{
+	if err := a.userRep.Update(ctx, repositoriestransfer.UpdateUserInfo{
 		Id:         updateInfo.Id,
-		UpdateInfo: updateItems,
+		UpdateInfo: servicesutils.ConvertMapKeysToStrings(updateInfo.UpdateFields),
 	}, tx); err != nil {
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t update user in db", err))
 	}
 
-	exUser, exErr := a.userRep.User(ctx, repositories_transfer.GetUserInfo{
-		Target: repositories_transfer.UserIdCondition,
-		Value:  updateInfo.Id,
+	exUser, exErr := a.userRep.User(ctx, repositoriestransfer.GetUserInfo{
+		Condition: map[repositoriestransfer.UserFieldTarget]any{
+			repositoriestransfer.UserIdCondition: updateInfo.Id,
+		},
 	}, tx)
 	if exErr != nil {
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t get user from db", err))
 	}
 
-	if err := a.userRep.DeleteUserFromCache(ctx, updateInfo.Id); err != nil {
+	if err := a.userRep.DeleteFromCache(ctx, updateInfo.Id); err != nil {
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t update user in db", err))
 	}
 
@@ -176,7 +168,7 @@ func (a *UserService) UpdateUser(ctx context.Context, updateInfo *transfer.Updat
 }
 
 func (a *UserService) DeleteUser(ctx context.Context, deleteInfo *transfer.DeleteUserInfo) (resErr error) {
-	logger.UpdateLoggerCtx(ctx, logger.ActionUserIdKey, deleteInfo.Id)
+	ctx = logger.UpdateLoggerCtx(ctx, logger.ActionUserIdKey, deleteInfo.Id)
 
 	a.log.InfoContext(ctx, "try to delete user")
 
@@ -185,18 +177,19 @@ func (a *UserService) DeleteUser(ctx context.Context, deleteInfo *transfer.Delet
 		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t begin transaction", err))
 	}
 	defer func() {
-		resErr = services_utils.HandleErrInTransaction(resErr, tx)
+		resErr = servicesutils.HandleErrInTransaction(resErr, tx)
 	}()
 
-	user, err := a.userRep.User(ctx, repositories_transfer.GetUserInfo{
-		Target: repositories_transfer.UserIdCondition,
-		Value:  deleteInfo.Id,
+	user, err := a.userRep.User(ctx, repositoriestransfer.GetUserInfo{
+		Condition: map[repositoriestransfer.UserFieldTarget]any{
+			repositoriestransfer.UserIdCondition: deleteInfo.Id,
+		},
 	}, tx)
 	if err != nil {
 		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t` `GetUser`", err))
 	}
 
-	if err := a.userRep.DeleteUser(ctx, repositories_transfer.DeleteUserInfo{
+	if err := a.userRep.Delete(ctx, repositoriestransfer.DeleteUserInfo{
 		Id: deleteInfo.Id,
 	}, tx); err != nil {
 		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t` `DeleteUser`", err))
@@ -204,7 +197,7 @@ func (a *UserService) DeleteUser(ctx context.Context, deleteInfo *transfer.Delet
 
 	a.log.InfoContext(ctx, "user deleted from db")
 
-	if err := a.userRep.DeleteUserFromCache(ctx, deleteInfo.Id); err != nil {
+	if err := a.userRep.DeleteFromCache(ctx, deleteInfo.Id); err != nil {
 		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t` `DeleteUser`", err))
 	}
 
@@ -212,7 +205,7 @@ func (a *UserService) DeleteUser(ctx context.Context, deleteInfo *transfer.Delet
 
 	eventId := uuid.New()
 
-	logger.UpdateLoggerCtx(ctx, logger.EventIdKey, eventId)
+	ctx = logger.UpdateLoggerCtx(ctx, logger.EventIdKey, eventId)
 
 	messageEntity := messages.UserDeletedMessage{
 		User: messages.UserMessage{
@@ -234,7 +227,7 @@ func (a *UserService) DeleteUser(ctx context.Context, deleteInfo *transfer.Delet
 		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t` `MarshalMessage`", err))
 	}
 
-	if err := a.eventsRep.Create(ctx, repositories_transfer.CreateEventInfo{
+	if err := a.eventsRep.Create(ctx, repositoriestransfer.CreateEventInfo{
 		EventId:   eventId,
 		EventType: amqpclient.UserDeletedEventKey,
 		Payload:   messageJson,
@@ -252,16 +245,16 @@ func (a *UserService) DeleteUser(ctx context.Context, deleteInfo *transfer.Delet
 }
 
 func (a *UserService) UploadAvatar(ctx context.Context, uploadInfo *transfer.UploadAvatarInfo) (resAvatar *transfer.AvatarResult, resErr error) {
-	logger.UpdateLoggerCtx(ctx, logger.ActionUserIdKey, uploadInfo.UserId)
+	ctx = logger.UpdateLoggerCtx(ctx, logger.ActionUserIdKey, uploadInfo.UserId)
 
-	a.log.Debug("try to upload avatar")
+	a.log.DebugContext(ctx, "try to upload avatar")
 
 	tx, err := a.txCreator.BeginTxCtx(ctx, nil)
 	if err != nil {
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t` `CreateEvent`", err))
 	}
 	defer func() {
-		resErr = services_utils.HandleErrInTransaction(resErr, tx)
+		resErr = servicesutils.HandleErrInTransaction(resErr, tx)
 	}()
 
 	imgUrl, err := a.imgStore.UploadFile(ctx, fmt.Sprintf("%s.jpeg", uuid.New().String()), uploadInfo.Image, s3client.ImageJpeg)
@@ -269,38 +262,30 @@ func (a *UserService) UploadAvatar(ctx context.Context, uploadInfo *transfer.Upl
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t` `CreateEvent`", err))
 	}
 
-	logger.UpdateLoggerCtx(ctx, avatarUruLogKey, imgUrl)
-	a.log.Debug("avatar is uploaded successfully")
+	ctx = logger.UpdateLoggerCtx(ctx, avatarUruLogKey, imgUrl)
+	a.log.DebugContext(ctx, "avatar is uploaded successfully")
 
-	//TODO
-	err = a.userRep.Update(ctx, repositories_transfer.UpdateUserInfo{
+	if err = a.userRep.Update(ctx, repositoriestransfer.UpdateUserInfo{
 		Id: uploadInfo.UserId,
-		UpdateInfo: []*repositories_transfer.UserFieldInfo{
-			{
-				Name:  "avatar",
-				Value: imgUrl,
-			},
-			{
-				Name:  "avatar_min",
-				Value: imgUrl,
-			},
+		UpdateInfo: map[string]interface{}{
+			"avatar":     imgUrl,
+			"avatar_min": imgUrl,
 		},
-	}, nil)
-	if err != nil {
+	}, nil); err != nil {
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t` `CreateEvent`", err))
 	}
 
-	if err := a.userRep.DeleteUserFromCache(ctx, uploadInfo.UserId); err != nil {
+	if err := a.userRep.DeleteFromCache(ctx, uploadInfo.UserId); err != nil {
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t` `CreateEvent`", err))
 	}
 
-	a.log.Debug("user deleted from cache")
+	a.log.DebugContext(ctx, "user deleted from cache")
 
 	if err := tx.Commit(); err != nil {
 		return nil, ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t` `CreateEvent`", err))
 	}
 
-	a.log.Debug("avatar is uploaded successfully")
+	a.log.DebugContext(ctx, "avatar is uploaded successfully")
 
 	return &transfer.AvatarResult{
 		UserId:     uploadInfo.UserId,
@@ -310,7 +295,7 @@ func (a *UserService) UploadAvatar(ctx context.Context, uploadInfo *transfer.Upl
 }
 
 func (a *UserService) CompensateDeletedUser(ctx context.Context, eventId uuid.UUID) error {
-	logger.UpdateLoggerCtx(ctx, logger.EventIdKey, eventId)
+	ctx = logger.UpdateLoggerCtx(ctx, logger.EventIdKey, eventId)
 
 	a.log.InfoContext(ctx, "trying to compensate user")
 
@@ -324,7 +309,7 @@ func (a *UserService) CompensateDeletedUser(ctx context.Context, eventId uuid.UU
 		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("can`t` `GetEvent`", err))
 	}
 
-	logger.UpdateLoggerCtx(ctx, logger.ActionUserIdKey, message.User.Id)
+	ctx = logger.UpdateLoggerCtx(ctx, logger.ActionUserIdKey, message.User.Id)
 	a.log.InfoContext(ctx, "event is found")
 
 	err = a.userRep.RollBackUser(ctx, models.User{

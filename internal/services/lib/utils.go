@@ -17,3 +17,12 @@ func HandleErrInTransaction(err error, tx database.Transaction) error {
 
 	return err
 }
+
+func ConvertMapKeysToStrings[T ~string](m map[T]any) map[string]any {
+	result := make(map[string]any)
+	for k, v := range m {
+		result[string(k)] = v
+	}
+
+	return result
+}

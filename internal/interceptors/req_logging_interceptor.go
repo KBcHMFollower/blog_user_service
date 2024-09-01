@@ -5,7 +5,6 @@ import (
 	"github.com/KBcHMFollower/blog_user_service/internal/logger"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
-	"log/slog"
 	"time"
 )
 
@@ -13,7 +12,7 @@ const (
 	methodLogKey = "method"
 )
 
-func ReqLoggingInterceptor(log *slog.Logger) grpc.UnaryServerInterceptor {
+func ReqLoggingInterceptor(log logger.Logger) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req interface{},
@@ -28,9 +27,9 @@ func ReqLoggingInterceptor(log *slog.Logger) grpc.UnaryServerInterceptor {
 		reqId := getInfoFromMd(md, "req-id")
 		userId := getInfoFromMd(md, "user-id")
 
-		logger.UpdateLoggerCtx(ctx, logger.ReqIdKey, reqId)
-		logger.UpdateLoggerCtx(ctx, logger.ReqUserKey, userId)
-		logger.UpdateLoggerCtx(ctx, methodLogKey, info.FullMethod)
+		ctx = logger.UpdateLoggerCtx(ctx, logger.ReqIdKey, reqId)
+		ctx = logger.UpdateLoggerCtx(ctx, logger.ReqUserKey, userId)
+		ctx = logger.UpdateLoggerCtx(ctx, methodLogKey, info.FullMethod)
 
 		log.InfoContext(ctx, "--Method starting execution--", "data", req)
 
@@ -47,7 +46,7 @@ func ReqLoggingInterceptor(log *slog.Logger) grpc.UnaryServerInterceptor {
 }
 
 func getInfoFromMd(md metadata.MD, k string) string {
-	v, ok := md["req-id"]
+	v, ok := md[k]
 
 	switch ok {
 	case true:

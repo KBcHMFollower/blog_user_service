@@ -2,12 +2,14 @@ package workers
 
 import (
 	"context"
+	"errors"
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient"
-	repositories_transfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
+	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
+	repositoriestransfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
+	servicestransfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
 	"github.com/KBcHMFollower/blog_user_service/internal/logger"
 	dep "github.com/KBcHMFollower/blog_user_service/internal/workers/interfaces/dep"
 	"github.com/google/uuid"
-	"log/slog"
 	"time"
 )
 
@@ -24,11 +26,11 @@ type EventChecker struct {
 	amqpClient amqpclient.AmqpClient
 	eventRep   EventStore
 	txCreator  dep.TransactionCreator
-	logger     *slog.Logger
+	logger     logger.Logger
 	ctx        context.Context
 }
 
-func NewEventChecker(amqpClient amqpclient.AmqpClient, eventRep EventStore, logger *slog.Logger, txCreator dep.TransactionCreator) *EventChecker {
+func NewEventChecker(amqpClient amqpclient.AmqpClient, eventRep EventStore, logger logger.Logger, txCreator dep.TransactionCreator) *EventChecker {
 	return &EventChecker{
 		amqpClient: amqpClient,
 		eventRep:   eventRep,
@@ -39,8 +41,8 @@ func NewEventChecker(amqpClient amqpclient.AmqpClient, eventRep EventStore, logg
 
 func (as *EventChecker) Run(ctx context.Context) error {
 	as.ctx = ctx
-	logger.UpdateLoggerCtx(as.ctx, workerNameLogKey, "EventChecker")
-	as.logger.Info("started")
+	ctx = logger.UpdateLoggerCtx(as.ctx, workerNameLogKey, "EventChecker")
+	as.logger.InfoContext(ctx, "started")
 
 	go func() {
 		for {
@@ -48,9 +50,14 @@ func (as *EventChecker) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return
 			default:
-				events, err := as.eventRep.EventsWithStatus(ctx, repositories_transfer.MessagesWaitingStatus, 50)
-				if err != nil {
-					as.logger.Warn("can`t get events from  db: ", "err", err.Error())
+				events, err := as.eventRep.Events(ctx, repositoriestransfer.GetEventsInfo{
+					Condition: map[repositoriestransfer.EventsConditionField]interface{}{
+						repositoriestransfer.EventStatusCondition: repositoriestransfer.MessagesWaitingStatus,
+					},
+					Size: 50, //todo: возможно стоит передавать параметром откуда-то
+				})
+				if err != nil && !errors.Is(err, ctxerrors.ErrNotFound) {
+					as.logger.WarnContext(ctx, "can`t get events from  db: ", "err", err.Error())
 					time.Sleep(5 * time.Second)
 					continue
 				}
@@ -58,11 +65,11 @@ func (as *EventChecker) Run(ctx context.Context) error {
 				rejectedList := make([]uuid.UUID, 0)
 				sentList := make([]uuid.UUID, 0)
 				for _, event := range events {
-					logger.UpdateLoggerCtx(ctx, logger.EventIdKey, event.EventId)
+					ctx = logger.UpdateLoggerCtx(ctx, logger.EventIdKey, event.EventId)
 
 					err = as.amqpClient.Publish(ctx, event.EventType, []byte(event.Payload))
 					if err != nil {
-						as.logger.Error("can`t publish event: ", "err", err.Error())
+						as.logger.ErrorContext(ctx, "can`t publish event: ", "err", err.Error())
 
 						rejectedList = append(rejectedList, event.EventId)
 
@@ -71,22 +78,22 @@ func (as *EventChecker) Run(ctx context.Context) error {
 					}
 					sentList = append(sentList, event.EventId)
 
-					as.logger.Info("event published")
+					as.logger.InfoContext(ctx, "event published")
 				}
 
-				err = as.eventRep.SetStatuses(ctx, rejectedList, repositories_transfer.MessagesErrorStatus)
-				if err != nil {
-					as.logger.Error("can`t set status in events: ", "err", err.Error())
-					time.Sleep(5 * time.Second)
-					continue
-				}
+				err = as.eventRep.UpdateMany(ctx, repositoriestransfer.UpdateManyEventInfo{
+					EventId: rejectedList,
+					UpdateData: map[string]interface{}{
+						string(servicestransfer.StatusMsgUpdateTarget): repositoriestransfer.MessagesErrorStatus,
+					},
+				})
 
-				err = as.eventRep.SetStatuses(ctx, sentList, repositories_transfer.MessagesSentStatus)
-				if err != nil {
-					as.logger.Error("can`t set status in events: ", "err", err.Error())
-					time.Sleep(5 * time.Second)
-					continue
-				}
+				err = as.eventRep.UpdateMany(ctx, repositoriestransfer.UpdateManyEventInfo{
+					EventId: sentList,
+					UpdateData: map[string]interface{}{
+						string(servicestransfer.StatusMsgUpdateTarget): repositoriestransfer.MessagesSentStatus,
+					},
+				})
 
 				time.Sleep(5 * time.Second)
 			}
@@ -100,5 +107,5 @@ func (as *EventChecker) Run(ctx context.Context) error {
 func (as *EventChecker) Stop() {
 	as.ctx.Done()
 
-	as.logger.Info("worker died")
+	as.logger.InfoContext(as.ctx, "worker died")
 }

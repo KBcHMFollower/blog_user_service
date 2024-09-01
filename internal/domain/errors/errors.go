@@ -26,6 +26,9 @@ func NewErr(s context.Context, e error) error {
 }
 
 func (e *ContextError) Error() string {
+	if e.msg == "" {
+		return e.err.Error()
+	}
 	return fmt.Sprintf("%s: %s", e.msg, e.err.Error())
 }
 
@@ -43,17 +46,30 @@ func WrapCtx(ctx context.Context, err error) error {
 }
 
 func Wrap(message string, err error) error {
-	errCtx := getCtxOrErrCtx(err, context.Background())
+	errCtx := getCtxOrErrCtx(err, nil)
 
 	return &ContextError{ctx: errCtx, msg: message, err: err}
+}
+
+func ErrorCtx(ctx context.Context, err error) context.Context {
+	var ctxErr *ContextError
+	if errors.As(err, &ctxErr) {
+		if ctxErr.ctx != nil {
+			return ctxErr.ctx
+		}
+	}
+
+	return ctx
 }
 
 func getCtxOrErrCtx(err error, ctx context.Context) context.Context {
 	errCtx := ctx
 
-	var ctxErr ContextError
+	var ctxErr *ContextError
 	if errors.As(err, &ctxErr) {
-		errCtx = ctxErr.ctx
+		if ctxErr.ctx != nil {
+			errCtx = ctxErr.ctx
+		}
 	}
 
 	return errCtx

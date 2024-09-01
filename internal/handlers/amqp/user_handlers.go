@@ -5,36 +5,54 @@ import (
 	"encoding/json"
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient/messages"
 	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
+	repositoriestransfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/repositories"
+	servicestransfer "github.com/KBcHMFollower/blog_user_service/internal/domain/layers_TOs/services"
 	"github.com/KBcHMFollower/blog_user_service/internal/logger"
-	services_interfaces "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces"
-	"log/slog"
+	servicesinterfaces "github.com/KBcHMFollower/blog_user_service/internal/services/interfaces"
 )
 
 type UserHandler struct {
-	userService services_interfaces.UserService
-	log         *slog.Logger
+	messService servicesinterfaces.MessagesService
+	userService servicesinterfaces.UserService
+	log         logger.Logger
 }
 
-func NewUserHandler(usrService services_interfaces.UserService, log *slog.Logger) *UserHandler {
+func NewUserHandler(
+	usrService servicesinterfaces.UserService,
+	messService servicesinterfaces.MessagesService,
+	log logger.Logger,
+) *UserHandler {
 	return &UserHandler{
 		userService: usrService,
+		messService: messService,
 		log:         log,
 	}
 }
 
 func (handler *UserHandler) HandlePostDeletingEvent(ctx context.Context, message []byte) error {
+
 	var resInfo messages.PostsDeleted
 
 	if err := json.Unmarshal(message, &resInfo); err != nil {
-		handler.log.ErrorContext(ctx, "Error unmarshalling post deleting event", logger.ErrKey, err.Error())
+		handler.log.ErrorContext(ctxerrors.ErrorCtx(ctx, err), "Error unmarshalling post deleting event", logger.ErrKey, err.Error())
 		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("error unmarshalling post deleting event", err))
 	}
 
+	ctx = logger.UpdateLoggerCtx(ctx, logger.EventIdKey, resInfo.EventId)
+
 	if resInfo.Status == "OK" {
-		return nil
-	} //TODO: ЧЕТО НУЖНО ДЕЛАТЬ
-	if err := handler.userService.CompensateDeletedUser(context.TODO(), resInfo.EventId); err != nil {
-		handler.log.ErrorContext(ctx, "Error calling CompensateDeletedUser", logger.ErrKey, err.Error())
+		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap(
+			"error in setting success status",
+			handler.messService.UpdateMessage(ctx, servicestransfer.UpdateMessageInfo{
+				EventId: resInfo.EventId,
+				UpdateData: map[servicestransfer.EventUpdateTarget]any{
+					servicestransfer.StatusMsgUpdateTarget: repositoriestransfer.MessagesSuccessStatus,
+				},
+			}),
+		))
+	}
+	if err := handler.userService.CompensateDeletedUser(ctx, resInfo.EventId); err != nil {
+		handler.log.ErrorContext(ctxerrors.ErrorCtx(ctx, err), "Error calling CompensateDeletedUser", logger.ErrKey, err.Error())
 		return ctxerrors.WrapCtx(ctx, ctxerrors.Wrap("error calling CompensateDeletedUser", err))
 	}
 
