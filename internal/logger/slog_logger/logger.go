@@ -60,7 +60,9 @@ func UpdateLoggerCtx(ctx context.Context, key string, v any) context.Context {
 	if !ok {
 		c = make(map[string]interface{})
 	}
+
 	c[key] = v
+
 	return context.WithValue(ctx, loggerCtxKey, c)
 }
 
