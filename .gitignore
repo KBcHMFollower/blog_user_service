@@ -1,0 +1,42 @@
+# Директории Go
+/bin/
+/pkg/
+/vendor/
+
+# Бинарные файлы, создаваемые Go
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Кэш-модули Go
+go.sum
+go.work
+go.work.sum
+
+# Каталог сборки Go
+/build/
+
+# Логи и временные файлы
+*.log
+*.tmp
+*.out
+
+# Конфигурационные файлы IDE GoLand
+.idea/
+*.iml
+
+# Кэш модулей Go в GoLand
+*.test
+
+# Настройки среды разработки
+.vscode/
+.DS_Store
+
+# Docker-файлы
+docker-compose.override.yml
+.env
+
+# Информация о сборке, если используется
+/dist/
+coverage.out

@@ -9,15 +9,18 @@ import (
 	"github.com/KBcHMFollower/blog_user_service/internal/app/workers_app"
 	"github.com/KBcHMFollower/blog_user_service/internal/clients/amqpclient"
 	"github.com/KBcHMFollower/blog_user_service/internal/config"
+	ctxerrors "github.com/KBcHMFollower/blog_user_service/internal/domain/errors"
 	amqphandlers "github.com/KBcHMFollower/blog_user_service/internal/handlers/amqp"
 	"github.com/KBcHMFollower/blog_user_service/internal/interceptors"
 	"github.com/KBcHMFollower/blog_user_service/internal/lib"
+	"github.com/KBcHMFollower/blog_user_service/internal/lib/circuid_breaker"
 	"github.com/KBcHMFollower/blog_user_service/internal/lib/validators"
 	"github.com/KBcHMFollower/blog_user_service/internal/logger"
 	"github.com/KBcHMFollower/blog_user_service/internal/repository"
 	authservice "github.com/KBcHMFollower/blog_user_service/internal/services"
 	"github.com/KBcHMFollower/blog_user_service/internal/workers"
 	"google.golang.org/grpc"
+	"time"
 )
 
 type App struct {
@@ -73,10 +76,28 @@ func New(
 
 	rabbitMqApp.RegisterHandler(amqpclient.PostsDeletedEventKey, amqpUsersHandler.HandlePostDeletingEvent)
 
+	circuitBreaker := circuid_breaker.NewCircuitBreaker().Configure(func(options *circuid_breaker.CBOptions) {
+		options.IgnorableErrors = []error{
+			ctxerrors.ErrNotFound,
+			ctxerrors.ErrUnauthorized,
+			ctxerrors.ErrConflict,
+			ctxerrors.ErrBadRequest,
+		}
+		options.OpenConditions = circuid_breaker.OpenCondition{
+			FailuresRate: 40,
+			TimeInterval: time.Duration(100),
+		}
+		options.CloseConditions = circuid_breaker.CloseCondition{
+			SuccessRate: 80,
+			Duration:    time.Duration(100),
+		}
+	})
+
 	interceptorsChain := grpc.ChainUnaryInterceptor(
+		interceptors.CircuitBreakerInterceptor(circuitBreaker),
+		interceptors.ErrorHandlerInterceptor(),
 		interceptors.ReqLoggingInterceptor(log),
 		interceptors.IdempotencyInterceptor(reqService),
-		interceptors.ErrorHandlerInterceptor(),
 	)
 
 	workersApp := workers_app.New()

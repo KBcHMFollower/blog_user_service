@@ -22,19 +22,16 @@ func (cbs *closedBreakerState) State() BreakerStateName { return breakerClose }
 func (cbs *closedBreakerState) ready() bool             { return true }
 func (cbs *closedBreakerState) onEntry(cb *CircuitBreaker) {
 	cb.counter.reset()
-	if cb.openConditions.timeInterval == time.Duration(0) {
+	if cb.OpenConditions.TimeInterval == time.Duration(0) {
 		return
 	}
 
-	cbs.ticker = cb.clock.Ticker(cb.openConditions.timeInterval)
+	cbs.ticker = cb.Clock.Ticker(cb.OpenConditions.TimeInterval)
 	go func() {
 		for {
 			select {
 			case <-cbs.ticker.C:
 				cb.checkOpen()
-			default:
-				cbs.ticker.Stop()
-				return
 			}
 		}
 	}()
@@ -59,7 +56,7 @@ func (obs *openBreakerState) State() BreakerStateName { return breakerOpen }
 func (obs *openBreakerState) onEntry(cb *CircuitBreaker) {
 	cb.counter.reset()
 
-	obs.timer = cb.clock.AfterFunc(cb.openTime, func() {
+	obs.timer = cb.Clock.AfterFunc(cb.OpenTime, func() {
 		cb.SetState(&halfOpenBreakerState{})
 	})
 }
@@ -79,17 +76,17 @@ type halfOpenBreakerState struct {
 func (hobs *halfOpenBreakerState) State() BreakerStateName { return breakerHalfOpen }
 func (hobs *halfOpenBreakerState) onEntry(cb *CircuitBreaker) {
 	cb.counter.reset()
-	if cb.closeConditions.duration == time.Duration(0) {
+	if cb.CloseConditions.Duration == time.Duration(0) {
 		return
 	}
 
-	hobs.timer = cb.clock.AfterFunc(cb.closeConditions.duration, func() {
+	hobs.timer = cb.Clock.AfterFunc(cb.CloseConditions.Duration, func() {
 		if cb.checkClose() {
 			cb.SetState(&closedBreakerState{})
 			return
 		}
 
-		cb.SetState(&halfOpenBreakerState{})
+		cb.SetState(&openBreakerState{})
 	})
 }
 func (hobs *halfOpenBreakerState) onSuccess(cb *CircuitBreaker) {

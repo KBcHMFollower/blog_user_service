@@ -55,43 +55,43 @@ func (c *Counter) resetSuccess() {
 }
 
 type CloseCondition struct {
-	duration           time.Duration
-	successRate        uint64
-	consecutiveSuccess int64
+	Duration           time.Duration
+	SuccessRate        uint64
+	ConsecutiveSuccess int64
 }
 
 type OpenCondition struct {
-	timeInterval        time.Duration
-	failuresRate        uint64
-	consecutiveFailures int64
+	TimeInterval        time.Duration
+	FailuresRate        uint64
+	ConsecutiveFailures int64
 }
 
 type CBOptions struct {
-	clock clock.Clock
+	Clock clock.Clock
 
-	openConditions  OpenCondition
-	closeConditions CloseCondition
+	OpenConditions  OpenCondition
+	CloseConditions CloseCondition
 
-	openTime        time.Duration
-	ignorableErrors []error
+	OpenTime        time.Duration
+	IgnorableErrors []error
 }
 
 var defaultCBOptions = CBOptions{
-	openTime:        time.Duration(60),
-	ignorableErrors: []error{},
+	OpenTime:        time.Duration(60),
+	IgnorableErrors: []error{},
 
-	clock: clock.New(),
+	Clock: clock.New(),
 
-	openConditions: OpenCondition{
-		timeInterval:        time.Duration(60),
-		failuresRate:        30,
-		consecutiveFailures: 0,
+	OpenConditions: OpenCondition{
+		TimeInterval:        time.Duration(60),
+		FailuresRate:        30,
+		ConsecutiveFailures: 0,
 	},
 
-	closeConditions: CloseCondition{
-		duration:           time.Duration(60),
-		successRate:        90,
-		consecutiveSuccess: 5,
+	CloseConditions: CloseCondition{
+		Duration:           time.Duration(60),
+		SuccessRate:        90,
+		ConsecutiveSuccess: 5,
 	},
 }
 
@@ -115,8 +115,9 @@ func NewCircuitBreaker() *CircuitBreaker {
 	return cb
 }
 
-func (cb *CircuitBreaker) Configure(conf func(options *CBOptions)) {
+func (cb *CircuitBreaker) Configure(conf func(options *CBOptions)) *CircuitBreaker {
 	conf(&cb.CBOptions)
+	return cb
 }
 
 func (cb *CircuitBreaker) State() BreakerStateName {
@@ -153,7 +154,7 @@ func (cb *CircuitBreaker) Do(ctx context.Context, fn BreakerHandleFn) (any, erro
 		cb.Success()
 	}
 
-	if lib.Contains(cb.ignorableErrors, err) {
+	if lib.Contains(cb.IgnorableErrors, err) {
 		cb.Success()
 	}
 
@@ -202,25 +203,25 @@ func (cb *CircuitBreaker) checkClose() bool {
 func (cb *CircuitBreaker) checkFRateCondition() bool {
 	counterTotal := cb.counter.failure + cb.counter.success
 
-	if cb.openConditions.failuresRate <= 0 {
+	if cb.OpenConditions.FailuresRate <= 0 {
 		return false
 	}
 
-	return cb.counter.failure/counterTotal >= cb.openConditions.failuresRate/100
+	return cb.counter.failure/counterTotal >= cb.OpenConditions.FailuresRate/100
 }
 
 func (cb *CircuitBreaker) checkSRateCondition() bool {
 	counterTotal := cb.counter.failure + cb.counter.success
 
-	if cb.closeConditions.successRate <= 0 {
+	if cb.CloseConditions.SuccessRate <= 0 {
 		return false
 	}
 
-	return cb.counter.success/counterTotal >= cb.closeConditions.successRate/100
+	return cb.counter.success/counterTotal >= cb.CloseConditions.SuccessRate/100
 }
 
 func (cb *CircuitBreaker) checkConsecutiveFailuresCondition() bool {
-	if cb.openConditions.consecutiveFailures <= 0 {
+	if cb.OpenConditions.ConsecutiveFailures <= 0 {
 		return false
 	}
 
@@ -228,7 +229,7 @@ func (cb *CircuitBreaker) checkConsecutiveFailuresCondition() bool {
 }
 
 func (cb *CircuitBreaker) checkConsecutiveSuccessCondition() bool {
-	if cb.closeConditions.consecutiveSuccess <= 0 {
+	if cb.CloseConditions.ConsecutiveSuccess <= 0 {
 		return false
 	}
 
