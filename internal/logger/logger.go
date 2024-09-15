@@ -21,6 +21,7 @@ type Logger interface {
 	ErrorContext(ctx context.Context, msg string, args ...any)
 	WarnContext(ctx context.Context, msg string, args ...any)
 	InfoContext(ctx context.Context, msg string, args ...any)
+	Info(msg string, args ...any)
 }
 
 func UpdateLoggerCtx(ctx context.Context, key string, v any) context.Context {

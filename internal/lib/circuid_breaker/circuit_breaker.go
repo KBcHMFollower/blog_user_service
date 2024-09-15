@@ -98,8 +98,8 @@ var defaultCBOptions = CBOptions{
 type CircuitBreaker struct {
 	mx sync.Mutex
 
-	state             breakerState
-	onChangeStateHook func(from breakerState, to breakerState)
+	state             BreakerState
+	OnChangeStateHook func(from BreakerState, to BreakerState)
 
 	counter *Counter
 
@@ -167,7 +167,7 @@ func (cb *CircuitBreaker) Do(ctx context.Context, fn BreakerHandleFn) (any, erro
 	return res, err
 }
 
-func (cb *CircuitBreaker) SetState(state breakerState) {
+func (cb *CircuitBreaker) SetState(state BreakerState) {
 	cb.mx.Lock()
 	defer cb.mx.Unlock()
 
@@ -182,12 +182,12 @@ func (cb *CircuitBreaker) SetState(state breakerState) {
 	cb.handleOnStateChange(from, cb.state)
 }
 
-func (cb *CircuitBreaker) handleOnStateChange(from breakerState, to breakerState) {
+func (cb *CircuitBreaker) handleOnStateChange(from BreakerState, to BreakerState) {
 	if from == nil || to == nil {
 		return
 	}
 
-	cb.onChangeStateHook(from, to)
+	cb.OnChangeStateHook(from, to)
 }
 
 type BreakerHandleFn func() (any, error)

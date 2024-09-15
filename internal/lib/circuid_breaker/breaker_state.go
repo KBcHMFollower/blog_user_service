@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type breakerState interface {
+type BreakerState interface {
 	State() BreakerStateName
 	ready() bool
 	onEntry(cb *CircuitBreaker)

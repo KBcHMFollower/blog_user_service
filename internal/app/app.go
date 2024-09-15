@@ -92,6 +92,9 @@ func New(
 			Duration:    time.Duration(100),
 		}
 	})
+	circuitBreaker.OnChangeStateHook = func(from circuid_breaker.BreakerState, to circuid_breaker.BreakerState) {
+		log.Info("circuit breaker state changed", "from", from, "to", to)
+	}
 
 	interceptorsChain := grpc.ChainUnaryInterceptor(
 		interceptors.CircuitBreakerInterceptor(circuitBreaker),
